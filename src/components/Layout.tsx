@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { BookA, BookOpen, Boxes, LayoutDashboard, Menu, Search, ShieldAlert, Siren, X } from 'lucide-react'
+import { BookA, BookOpen, Boxes, LayoutDashboard, Menu, Moon, Search, ShieldAlert, Siren, Sun, X } from 'lucide-react'
 import { api } from '../api'
 
 const NAV = [
@@ -99,6 +99,25 @@ function GlobalSearch() {
   )
 }
 
+function ThemeToggle() {
+  const [light, setLight] = useState(() => document.documentElement.classList.contains('light'))
+  return (
+    <button
+      className="grid size-9 cursor-pointer place-items-center rounded-lg text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+      onClick={() => {
+        const next = !light
+        setLight(next)
+        document.documentElement.className = next ? 'light' : 'dark'
+        localStorage.setItem('aegis-theme', next ? 'light' : 'dark')
+      }}
+      aria-label={light ? 'Switch to dark mode' : 'Switch to light mode'}
+      title={light ? 'Switch to dark mode' : 'Switch to light mode'}
+    >
+      {light ? <Moon className="size-4" /> : <Sun className="size-4" />}
+    </button>
+  )
+}
+
 export function Layout() {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
@@ -132,6 +151,7 @@ export function Layout() {
           </button>
           <GlobalSearch />
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             {api.mode === 'snapshot' ? (
               <span className="hidden items-center gap-1.5 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-medium text-cyan-100 sm:inline-flex">
                 <span className="size-1.5 rounded-full bg-cyan-300" /> Snapshot

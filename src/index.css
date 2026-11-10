@@ -13,10 +13,52 @@
   --color-ink-700: #1e2747;
   --color-ink-600: #2b365e;
 
+  --color-paper: #ffffff;
+
   --color-sev-critical: #f43f5e;
   --color-sev-high: #fb923c;
   --color-sev-medium: #facc15;
   --color-sev-low: #38bdf8;
+}
+
+:root {
+  color-scheme: dark;
+
+  --viz-line: rgb(255 255 255 / 0.06);
+  --viz-label: rgb(148 163 184 / 0.5);
+  --viz-edge: rgb(148 163 184 / 0.22);
+  --viz-edge-lit: #c7d2fe;
+}
+
+/* Light theme: remaps the color tokens so every utility flips in place. */
+html.light {
+  color-scheme: light;
+
+  --color-ink-950: #f1f5f9;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f8fafc;
+  --color-ink-800: #e2e8f0;
+  --color-ink-700: #cbd5e1;
+  --color-ink-600: #94a3b8;
+
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-600: #94a3b8;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+  --color-slate-950: #f8fafc;
+
+  --color-white: #0f172a;
+  --color-black: #ffffff;
+
+  --viz-line: rgb(15 23 42 / 0.08);
+  --viz-label: rgb(100 116 139 / 0.55);
+  --viz-edge: rgb(100 116 139 / 0.3);
+  --viz-edge-lit: #6366f1;
 }
 
 @layer base {
@@ -50,7 +92,7 @@
 }
 
 @utility card {
-  @apply rounded-2xl border border-white/[0.06] bg-ink-900/70 shadow-[0_1px_0_0_rgb(255_255_255/0.04)_inset] backdrop-blur-sm;
+  @apply rounded-2xl border border-white/[0.06] bg-ink-900/70 shadow-[0_1px_0_0_var(--viz-line)_inset] backdrop-blur-sm;
 }
 
 @utility input {
@@ -62,7 +104,7 @@
 }
 
 @utility btn-primary {
-  @apply btn bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-lg shadow-indigo-500/20 hover:brightness-110;
+  @apply btn bg-gradient-to-r from-indigo-500 to-cyan-500 text-paper shadow-lg shadow-indigo-500/20 hover:brightness-110;
 }
 
 @utility btn-ghost {

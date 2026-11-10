@@ -3,8 +3,8 @@ import type { SeverityCounts } from '../api/types'
 import { SEVERITIES, SEVERITY_COLOR } from '../lib/format'
 
 const tooltipStyle = {
-  contentStyle: { background: '#0f152a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12, color: '#e2e8f0' },
-  labelStyle: { color: '#94a3b8', marginBottom: 4 },
+  contentStyle: { background: 'var(--color-ink-850)', border: '1px solid var(--viz-line)', borderRadius: 12, fontSize: 12, color: 'var(--color-slate-200)' },
+  labelStyle: { color: 'var(--color-slate-400)', marginBottom: 4 },
   itemStyle: { textTransform: 'capitalize' as const, padding: 0 },
 }
 
@@ -39,7 +39,7 @@ export function CoverageRing({ value, label, color = '#818cf8' }: { value: numbe
   return (
     <div className="flex items-center gap-3">
       <svg viewBox="0 0 64 64" className="size-16 -rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--viz-line)" strokeWidth="6" />
         {value != null && <circle cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${c * value} ${c}`} />}
       </svg>
       <div>

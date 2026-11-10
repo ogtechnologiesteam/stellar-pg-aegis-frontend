@@ -56,26 +56,26 @@ export function BlastRadius({ pkg, severity, exposures }: { pkg: string; severit
         </defs>
         {Array.from({ length: maxDepth }, (_, i) => (
           <g key={i}>
-            <circle cx={C} cy={C} r={(i + 1) * gap} fill="none" stroke="rgb(255 255 255 / 0.06)" strokeDasharray="3 6" />
-            <text x={C + 6} y={C - (i + 1) * gap - 6} fill="rgb(148 163 184 / 0.5)" fontSize="10">
+            <circle cx={C} cy={C} r={(i + 1) * gap} fill="none" stroke="var(--viz-line)" strokeDasharray="3 6" />
+            <text x={C + 6} y={C - (i + 1) * gap - 6} fill="var(--viz-label)" fontSize="10">
               {i === 0 ? 'affected' : `depth ${i + 1}`}
             </text>
           </g>
         ))}
         {edges.map((e) => {
           const lit = hover === e.id || hover === e.from
-          return <line key={e.id} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke={lit ? '#c7d2fe' : 'rgb(148 163 184 / 0.22)'} strokeWidth={lit ? 1.6 : 1} />
+          return <line key={e.id} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke={lit ? 'var(--viz-edge-lit)' : 'var(--viz-edge)'} strokeWidth={lit ? 1.6 : 1} />
         })}
         <circle cx={C} cy={C} r={Math.min(56, gap * 0.7)} fill="url(#br-core)" />
-        <circle cx={C} cy={C} r={20} fill="#0b1020" stroke={color} strokeWidth={2} />
-        <text x={C} y={C + 4} textAnchor="middle" fill="#fff" fontSize="11" fontWeight={600}>
+        <circle cx={C} cy={C} r={20} fill="var(--color-ink-900)" stroke={color} strokeWidth={2} />
+        <text x={C} y={C + 4} textAnchor="middle" fill="var(--color-slate-100)" fontSize="11" fontWeight={600}>
           pkg
         </text>
         {nodes.map((n) => (
           <g key={n.repo_id} className={n.project_id ? 'cursor-pointer' : ''} onMouseEnter={() => setHover(n.repo_id)} onMouseLeave={() => setHover(null)} onClick={() => n.project_id && navigate(`/projects/${encodeURIComponent(n.project_id)}`)}>
             <circle cx={n.x} cy={n.y} r={n.r + 6} fill={DEPTH_COLOR[Math.min(n.depth - 1, 2)]} opacity={hover === n.repo_id ? 0.25 : 0.1} />
-            <circle cx={n.x} cy={n.y} r={n.r} fill="#0f152a" stroke={DEPTH_COLOR[Math.min(n.depth - 1, 2)]} strokeWidth={2} strokeDasharray={n.project_id ? undefined : '3 3'} />
-            <text x={n.x} y={n.y + n.r + 14} textAnchor="middle" fill={hover === n.repo_id ? '#fff' : '#94a3b8'} fontSize="10.5">
+            <circle cx={n.x} cy={n.y} r={n.r} fill="var(--color-ink-850)" stroke={DEPTH_COLOR[Math.min(n.depth - 1, 2)]} strokeWidth={2} strokeDasharray={n.project_id ? undefined : '3 3'} />
+            <text x={n.x} y={n.y + n.r + 14} textAnchor="middle" fill={hover === n.repo_id ? 'var(--color-slate-100)' : 'var(--color-slate-400)'} fontSize="10.5">
               {n.repo_name.length > 20 ? `${n.repo_name.slice(0, 19)}…` : n.repo_name}
             </text>
           </g>
