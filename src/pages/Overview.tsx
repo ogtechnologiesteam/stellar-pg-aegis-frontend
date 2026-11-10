@@ -25,7 +25,7 @@ function Kpi({ icon, label, value, hint, accent }: { icon: ReactNode; label: str
 
 export default function Overview() {
   const summary = useSummary()
-  const findings = useFindings(8)
+  const findings = useFindings(8, 'project')
   const vulns = useVulns({ limit: 5 })
   const gaps = useProjects({ has_policy: false, sort: 'criticality', limit: 6 })
 
@@ -160,7 +160,7 @@ export default function Overview() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader title="Top priority findings" subtitle="Severity × criticality × exploitability × exposure" action={<Link to="/projects" className="text-xs text-indigo-300 hover:text-indigo-200">All projects</Link>} />
+          <CardHeader title="Top priority findings" subtitle="Highest-priority open finding per public good — severity × criticality × exploitability × exposure" action={<Link to="/projects" className="text-xs text-indigo-300 hover:text-indigo-200">All projects</Link>} />
           {findings.data ? <FindingsTable findings={findings.data.items} showProject expandable={false} /> : <Skeleton className="m-5 h-64" />}
         </Card>
         <Card>
