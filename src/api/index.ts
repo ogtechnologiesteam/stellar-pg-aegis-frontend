@@ -16,7 +16,7 @@ export const useProjects = (q: ProjectQuery = {}) =>
 
 export const useProject = (id: string) => useQuery({ queryKey: ['project', id], queryFn: () => api.getProject(id) })
 
-export const useFindings = (limit = 10) => useQuery({ queryKey: ['findings', limit], queryFn: () => api.listFindings({ limit }) })
+export const useFindings = (limit = 10, dedupe?: 'project') => useQuery({ queryKey: ['findings', limit, dedupe], queryFn: () => api.listFindings({ limit, dedupe }) })
 
 export const useVulns = (q: VulnQuery = {}) =>
   useQuery({ queryKey: ['vulns', q], queryFn: () => api.listVulns(q), placeholderData: keepPreviousData })

@@ -42,9 +42,10 @@ export const snapshotClient: AegisApi = {
     if (!p) throw new ApiError(404, `Project ${id} not found`)
     return p
   },
-  listFindings: async ({ limit } = {}) => {
+  listFindings: async ({ limit, dedupe } = {}) => {
     const all = (await loadSnapshot()).projects.flatMap((p) => p.findings).sort((a, b) => b.priority - a.priority)
-    return page(all, limit)
+    const items = dedupe === 'project' ? all.filter((f, i) => all.findIndex((x) => x.project_id === f.project_id) === i) : all
+    return page(items, limit)
   },
   listVulns: async ({ search, severity, ecosystem, limit, offset } = {}) => {
     const items = (await loadSnapshot()).vulns

@@ -16,7 +16,7 @@ export interface AegisApi {
   getSummary(): Promise<EcosystemSummary>
   listProjects(q?: ProjectQuery): Promise<Paginated<ProjectSummary>>
   getProject(id: string): Promise<ProjectDetail>
-  listFindings(q?: { limit?: number }): Promise<Paginated<Finding>>
+  listFindings(q?: { limit?: number; dedupe?: 'project' }): Promise<Paginated<Finding>>
   listVulns(q?: VulnQuery): Promise<Paginated<Vuln>>
   getVulnExposure(id: string): Promise<VulnExposure>
   lookupDisclosure(query: string): Promise<DisclosureLookup[]>
