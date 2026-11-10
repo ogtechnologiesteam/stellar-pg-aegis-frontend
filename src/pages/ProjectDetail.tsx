@@ -186,7 +186,7 @@ export default function ProjectDetail() {
                   {h.last_advisory_at && <dd className="text-slate-500">last {relativeTime(h.last_advisory_at)}</dd>}
                 </div>
               </dl>
-              <p className="pt-2 text-[11px] text-slate-600">“unknown” means the repo has not been enriched yet — coverage grows with each data refresh.</p>
+              <p className="pt-2 text-[11px] text-slate-600">“unknown” means the repo has not been checked yet — not that the practice is absent.</p>
             </div>
           </Card>
         </div>

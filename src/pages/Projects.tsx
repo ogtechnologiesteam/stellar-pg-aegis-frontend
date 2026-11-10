@@ -147,7 +147,7 @@ export default function Projects() {
                             <ShieldOff className="size-3" /> No policy
                           </Pill>
                         ) : (
-                          <Pill title="Repos not yet checked — run data:refresh to extend GitHub coverage">Unknown</Pill>
+                          <Pill title="GitHub disclosure checks haven't covered this repo yet — unknown means not checked, not absent">Unknown</Pill>
                         )}
                         {p.hygiene.pvr_enabled && (
                           <Pill tone="cyan">

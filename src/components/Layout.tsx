@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { BookA, BookOpen, Boxes, LayoutDashboard, Menu, Moon, Search, ShieldAlert, Siren, Sun, X } from 'lucide-react'
-import { api } from '../api'
+import { api, useSummary } from '../api'
 
 const NAV = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -26,6 +26,10 @@ export function Logo() {
 }
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { data: summary } = useSummary()
+  const generated = summary?.generated_at
+    ? new Date(summary.generated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
   return (
     <nav className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-1">
@@ -58,8 +62,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
         {api.mode === 'snapshot' && (
           <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.05] p-3 text-xs text-cyan-100/80">
-            <div className="mb-0.5 font-semibold">Snapshot data</div>
-            Real data collected by the snapshot builder. GitHub disclosure coverage is partial — run <code className="font-mono">data:refresh</code> to extend it.
+            <div className="mb-0.5 font-semibold">Snapshot data{generated ? ` · ${generated}` : ''}</div>
+            Real data from public sources, refreshed periodically. GitHub disclosure checks don't cover every repo yet — “Unknown” means not yet checked, not absent.
           </div>
         )}
       </div>
