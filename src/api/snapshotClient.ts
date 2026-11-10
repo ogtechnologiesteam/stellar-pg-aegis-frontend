@@ -22,9 +22,11 @@ const matches = (haystack: string, needle?: string) => !needle || haystack.toLow
 export const snapshotClient: AegisApi = {
   mode: 'snapshot',
   getSummary: async () => (await loadSnapshot()).summary,
-  listProjects: async ({ search, activity_status, has_policy, sort = 'priority', limit, offset } = {}) => {
+  listProjects: async ({ search, activity_status, has_policy, kev, fixable, sort = 'priority', limit, offset } = {}) => {
     const { projects } = await loadSnapshot()
     const items = projects
+      .filter((p) => !kev || p.findings.some((f) => f.kev))
+      .filter((p) => !fixable || p.findings.some((f) => f.fixed_versions.length > 0))
       .map(toSummary)
       .filter((p) => matches(`${p.display_name} ${p.canonical_id} ${p.category ?? ''}`, search))
       .filter((p) => !activity_status || p.activity_status === activity_status)
@@ -47,11 +49,16 @@ export const snapshotClient: AegisApi = {
     const items = dedupe === 'project' ? all.filter((f, i) => all.findIndex((x) => x.project_id === f.project_id) === i) : all
     return page(items, limit)
   },
-  listVulns: async ({ search, severity, ecosystem, limit, offset } = {}) => {
+  listVulns: async ({ search, severity, ecosystem, sort = 'newest', limit, offset } = {}) => {
     const items = (await loadSnapshot()).vulns
       .filter((v) => matches(`${v.id} ${v.package} ${v.summary} ${v.aliases.join(' ')}`, search))
       .filter((v) => !severity || v.severity === severity)
       .filter((v) => !ecosystem || v.ecosystem === ecosystem)
+      .sort((a, b) => {
+        const av = a.published ?? (sort === 'oldest' ? '9999' : '')
+        const bv = b.published ?? (sort === 'oldest' ? '9999' : '')
+        return sort === 'oldest' ? av.localeCompare(bv) : bv.localeCompare(av)
+      })
     return page(items, limit, offset)
   },
   getVulnExposure: async (id) => {

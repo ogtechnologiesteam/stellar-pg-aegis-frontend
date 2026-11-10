@@ -10,6 +10,7 @@ export default function Advisories() {
   const search = params.get('search') ?? ''
   const severity = (params.get('severity') ?? 'all') as Severity | 'all'
   const ecosystem = params.get('ecosystem') ?? ''
+  const sort = params.get('sort') === 'oldest' ? 'oldest' as const : 'newest' as const
   const { data: summary } = useSummary()
 
   const set = (k: string, v: string, fallback = '') =>
@@ -22,7 +23,7 @@ export default function Advisories() {
       { replace: true },
     )
 
-  const { data, error, isLoading, isPlaceholderData } = useVulns({ search: search || undefined, severity: severity === 'all' ? undefined : severity, ecosystem: ecosystem || undefined, limit: 100 })
+  const { data, error, isLoading, isPlaceholderData } = useVulns({ search: search || undefined, severity: severity === 'all' ? undefined : severity, ecosystem: ecosystem || undefined, sort, limit: 100 })
 
   return (
     <>
@@ -40,6 +41,10 @@ export default function Advisories() {
           ))}
         </select>
         <Segmented<Severity | 'all'> value={severity} onChange={(v) => set('severity', v, 'all')} options={[{ value: 'all', label: 'All' }, ...SEVERITIES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))]} />
+        <select value={sort} onChange={(e) => set('sort', e.target.value, 'newest')} className="input w-full lg:w-40" aria-label="Sort by">
+          <option value="newest">Sort: newest</option>
+          <option value="oldest">Sort: oldest</option>
+        </select>
       </Card>
 
       {error ? (

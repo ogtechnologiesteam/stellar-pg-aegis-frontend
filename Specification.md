@@ -242,11 +242,11 @@ Boolean/numeric signals, *profiles not a score*:
 ### FR10 Public API (read-only)
 | Endpoint | Description |
 | -------- | ----------- |
-| `GET /v1/projects` | Projects with hygiene summary + open findings counts. Query: `search`, `activity_status`, `has_policy`, `sort` (`priority`\|`criticality`\|`name`\|`findings`), `limit`, `offset` |
+| `GET /v1/projects` | Projects with hygiene summary + open findings counts. Query: `search`, `activity_status`, `has_policy`, `kev`, `fixable`, `sort` (`priority`\|`criticality`\|`name`\|`findings`), `limit`, `offset` |
 | `GET /v1/projects/{canonical_id}` | Full profile, disclosure channels, findings |
 | `GET /v1/findings` | Ecosystem-wide findings ordered by priority. Query: `limit`, `offset`, `dedupe=project` (top finding per project) |
 | `GET /v1/repos/{canonical_id}/findings` | Findings with priority breakdown, filters: severity, confidence, status |
-| `GET /v1/vulns` | Advisories affecting ≥1 public good. Query: `search`, `severity`, `ecosystem`, `limit`, `offset` |
+| `GET /v1/vulns` | Advisories affecting ≥1 public good. Query: `search`, `severity`, `ecosystem`, `sort` (`newest`\|`oldest`), `limit`, `offset` |
 | `GET /v1/vulns/{id}/exposure` | Advisory detail + all SCF repos/projects exposed to it (blast radius) |
 | `GET /v1/packages/{purl}/exposure` | Exposure for an external package |
 | `GET /v1/disclosure?q=` | Disclosure lookup by project / repo name |

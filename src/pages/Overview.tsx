@@ -7,19 +7,20 @@ import { FindingsTable } from '../components/FindingsTable'
 import { Card, CardHeader, ErrorState, KevBadge, PageHeader, Pill, SeverityBadge, Skeleton } from '../components/ui'
 import { SEVERITIES, SEVERITY_COLOR, relativeTime, totalFindings } from '../lib/format'
 
-function Kpi({ icon, label, value, hint, accent }: { icon: ReactNode; label: string; value: ReactNode; hint?: ReactNode; accent: string }) {
+function Kpi({ icon, label, value, hint, accent, to }: { icon: ReactNode; label: string; value: ReactNode; hint?: ReactNode; accent: string; to: string }) {
   return (
-    <Card className="relative overflow-hidden p-5">
+    <Link to={to} className="card group relative block overflow-hidden p-5 transition hover:border-indigo-400/25 hover:bg-ink-850/80">
       <div className="absolute -top-10 -right-10 size-32 rounded-full opacity-20 blur-2xl" style={{ background: accent }} />
       <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
         <span className="grid size-7 place-items-center rounded-lg bg-white/[0.04]" style={{ color: accent }}>
           {icon}
         </span>
         {label}
+        <ArrowRight className="ml-auto size-3.5 text-slate-600 opacity-0 transition group-hover:translate-x-0.5 group-hover:text-indigo-300 group-hover:opacity-100" />
       </div>
       <div className="mt-3 text-3xl font-semibold tracking-tight text-white tabular-nums">{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
-    </Card>
+    </Link>
   )
 }
 
@@ -56,10 +57,10 @@ export default function Overview() {
           Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)
         ) : (
           <>
-            <Kpi icon={<ShieldAlert className="size-4" />} label="Open findings" value={totalFindings(s.open_findings)} hint={`${s.open_findings.critical} critical · ${s.open_findings.high} high · across ${s.affected_projects} projects`} accent="#f43f5e" />
-            <Kpi icon={<Flame className="size-4" />} label="Known exploited (KEV)" value={s.kev_findings} hint="Actively exploited in the wild" accent="#fb923c" />
-            <Kpi icon={<Wrench className="size-4" />} label="Fixable now" value={s.fixable_findings} hint="A patched version exists upstream" accent="#34d399" />
-            <Kpi icon={<Timer className="size-4" />} label="Median advisory age" value={s.median_fixable_advisory_age_days != null ? `${s.median_fixable_advisory_age_days}d` : '—'} hint={`Snapshot ${relativeTime(s.generated_at)}`} accent="#818cf8" />
+            <Kpi icon={<ShieldAlert className="size-4" />} label="Open findings" value={totalFindings(s.open_findings)} hint={`${s.open_findings.critical} critical · ${s.open_findings.high} high · across ${s.affected_projects} projects`} accent="#f43f5e" to="/projects?sort=findings" />
+            <Kpi icon={<Flame className="size-4" />} label="Known exploited (KEV)" value={s.kev_findings} hint="Actively exploited in the wild" accent="#fb923c" to="/projects?kev=1" />
+            <Kpi icon={<Wrench className="size-4" />} label="Fixable now" value={s.fixable_findings} hint="A patched version exists upstream" accent="#34d399" to="/projects?fixable=1" />
+            <Kpi icon={<Timer className="size-4" />} label="Median advisory age" value={s.median_fixable_advisory_age_days != null ? `${s.median_fixable_advisory_age_days}d` : '—'} hint={`Snapshot ${relativeTime(s.generated_at)}`} accent="#818cf8" to="/advisories?sort=oldest" />
           </>
         )}
       </div>

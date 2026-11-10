@@ -215,6 +215,8 @@ export interface ProjectQuery {
   search?: string
   activity_status?: ActivityStatus
   has_policy?: boolean
+  kev?: boolean
+  fixable?: boolean
   sort?: 'priority' | 'criticality' | 'name' | 'findings'
   limit?: number
   offset?: number
@@ -224,6 +226,7 @@ export interface VulnQuery {
   search?: string
   severity?: Severity
   ecosystem?: string
+  sort?: 'newest' | 'oldest'
   limit?: number
   offset?: number
 }

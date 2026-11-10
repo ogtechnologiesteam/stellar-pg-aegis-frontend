@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from 'react-router'
-import { Github, Search, ShieldCheck, ShieldOff } from 'lucide-react'
+import { Github, Search, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import type { ActivityStatus, ProjectQuery } from '../api/types'
 import { useProjects } from '../api'
 import { Card, EmptyState, ErrorState, PageHeader, Pill, PriorityMeter, Segmented, SeverityStack, Skeleton, StatusPill } from '../components/ui'
@@ -15,6 +15,8 @@ export default function Projects() {
   const status = (params.get('status') ?? '') as ActivityStatus | ''
   const policy = (params.get('policy') ?? 'all') as PolicyFilter
   const sort = (params.get('sort') ?? 'priority') as Sort
+  const kev = params.has('kev')
+  const fixable = params.has('fixable')
 
   const set = (k: string, v: string, fallback = '') =>
     setParams(
@@ -30,6 +32,8 @@ export default function Projects() {
     search: search || undefined,
     activity_status: status || undefined,
     has_policy: policy === 'all' ? undefined : policy === 'present',
+    kev: kev || undefined,
+    fixable: fixable || undefined,
     sort,
     limit: 200,
   })
@@ -67,6 +71,22 @@ export default function Projects() {
           <option value="name">Sort: name</option>
         </select>
       </Card>
+
+      {(kev || fixable) && (
+        <div className="mb-4 -mt-1 flex items-center gap-2 text-xs text-slate-500">
+          Showing
+          {kev && (
+            <button onClick={() => set('kev', '')} className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2 py-0.5 font-medium text-rose-300 ring-1 ring-rose-500/25 ring-inset transition hover:bg-rose-500/20">
+              projects with KEV findings <X className="size-3" />
+            </button>
+          )}
+          {fixable && (
+            <button onClick={() => set('fixable', '')} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-300 ring-1 ring-emerald-500/25 ring-inset transition hover:bg-emerald-500/20">
+              projects with fixable findings <X className="size-3" />
+            </button>
+          )}
+        </div>
+      )}
 
       <Card className={isPlaceholderData ? 'opacity-70 transition' : 'transition'}>
         {error ? (
