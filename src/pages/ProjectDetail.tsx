@@ -33,10 +33,15 @@ export default function ProjectDetail() {
         <ArrowLeft className="size-3.5" /> All projects
       </Link>
       <PageHeader
-        eyebrow={p.category ?? 'Public good'}
+        eyebrow={p.category ?? (p.wg_listed ? 'Public good' : 'Stellar project')}
         title={
           <span className="flex flex-wrap items-center gap-3">
             {p.display_name} <StatusPill status={p.activity_status} />
+            {p.wg_listed && (
+              <Pill tone="indigo" title="Recognized Stellar public good — listed by the SCF Public Goods Maintenance WG">
+                Public good
+              </Pill>
+            )}
           </span>
         }
         description={p.description}
@@ -123,7 +128,7 @@ export default function ProjectDetail() {
                       <Star className="size-3" /> {r.stars}
                     </span>
                   )}
-                  <Pill tone={r.sbom_verified ? 'emerald' : 'slate'} title={r.sbom_verified ? 'SBOM submitted to PG Atlas via GitHub Action' : 'No verified SBOM — dependencies inferred or unknown'}>
+                  <Pill tone={r.sbom_verified ? 'emerald' : 'slate'} title={r.sbom_verified ? 'SBOM submitted to PG Atlas via GitHub Action' : 'No verified SBOM — dependencies inferred by PG Atlas or unknown'}>
                     {r.sbom_verified ? 'PG Atlas SBOM' : 'No PG Atlas SBOM'}
                   </Pill>
                   <span className="w-16 text-right text-xs text-slate-400">{r.open_findings} findings</span>

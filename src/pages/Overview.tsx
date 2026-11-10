@@ -29,6 +29,9 @@ export default function Overview() {
   const findings = useFindings(8, 'project')
   const vulns = useVulns({ limit: 5 })
   const gaps = useProjects({ has_policy: false, sort: 'criticality', limit: 6 })
+  const kevProjects = useProjects({ kev: true, limit: 1 })
+  const fixableProjects = useProjects({ fixable: true, limit: 1 })
+  const pgProjects = useProjects({ wg_listed: true, limit: 1 })
 
   if (summary.error) return <ErrorState error={summary.error} />
   const s = summary.data
@@ -39,7 +42,7 @@ export default function Overview() {
       <PageHeader
         eyebrow="Ecosystem overview"
         title="Security posture of Stellar public goods"
-        description="Known vulnerabilities in SCF public goods dependencies, ranked by how much of the ecosystem they affect, with how to report each to its maintainers."
+        description="Known vulnerabilities in tracked Stellar project dependencies — WG-recognized public goods included — ranked by how much of the ecosystem they affect, with how to report each to its maintainers."
         actions={
           <>
             <Link to="/disclose" className="btn-ghost">
@@ -58,8 +61,8 @@ export default function Overview() {
         ) : (
           <>
             <Kpi icon={<ShieldAlert className="size-4" />} label="Open findings" value={totalFindings(s.open_findings)} hint={`${s.open_findings.critical} critical · ${s.open_findings.high} high · across ${s.affected_projects} projects`} accent="#f43f5e" to="/projects?sort=findings" />
-            <Kpi icon={<Flame className="size-4" />} label="Known exploited (KEV)" value={s.kev_findings} hint="Actively exploited in the wild" accent="#fb923c" to="/projects?kev=1" />
-            <Kpi icon={<Wrench className="size-4" />} label="Fixable now" value={s.fixable_findings} hint="A patched version exists upstream" accent="#34d399" to="/projects?fixable=1" />
+            <Kpi icon={<Flame className="size-4" />} label="Known exploited (KEV)" value={s.kev_findings} hint={`Actively exploited in the wild · across ${kevProjects.data?.total ?? '…'} projects`} accent="#fb923c" to="/projects?kev=1" />
+            <Kpi icon={<Wrench className="size-4" />} label="Fixable now" value={s.fixable_findings} hint={`A patched version exists upstream · across ${fixableProjects.data?.total ?? '…'} projects`} accent="#34d399" to="/projects?fixable=1" />
             <Kpi icon={<Timer className="size-4" />} label="Median advisory age" value={s.median_fixable_advisory_age_days != null ? `${s.median_fixable_advisory_age_days}d` : '—'} hint={`Snapshot ${relativeTime(s.generated_at)}`} accent="#818cf8" to="/advisories?sort=oldest" />
           </>
         )}
@@ -190,7 +193,7 @@ export default function Overview() {
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="size-3.5 text-emerald-400/70" />
-            PG Atlas inventory: {s.pg_atlas.total_projects.toLocaleString()} projects · {s.pg_atlas.total_dependency_edges.toLocaleString()} dependency edges — Aegis tracks {s.projects_tracked} public goods
+            PG Atlas inventory: {s.pg_atlas.total_projects.toLocaleString()} projects · {s.pg_atlas.total_dependency_edges.toLocaleString()} dependency edges — Aegis tracks {s.projects_tracked} Stellar projects, {pgProjects.data?.total ?? '…'} recognized public goods
           </span>
           <span>Snapshot generated {relativeTime(s.generated_at)} · sources: {s.sources.join(', ')}</span>
         </div>

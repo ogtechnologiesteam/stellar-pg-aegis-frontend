@@ -150,7 +150,7 @@ export function FindingsTable({ findings, showProject = false, expandable = true
                   </td>
                   <td className="td">
                     <Pill tone={f.source === 'verified-sbom' ? 'emerald' : 'slate'} title={f.source === 'verified-sbom' ? 'Declared in an SBOM submitted to PG Atlas' : 'Inferred from PG Atlas registry crawl'}>
-                      {f.source === 'verified-sbom' ? 'PG Atlas SBOM' : 'Inferred'}
+                      {f.source === 'verified-sbom' ? 'PG Atlas SBOM' : 'PG Atlas inferred'}
                     </Pill>
                   </td>
                   <td className="td">

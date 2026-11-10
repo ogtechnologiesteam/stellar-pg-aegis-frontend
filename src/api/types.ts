@@ -217,6 +217,7 @@ export interface ProjectQuery {
   has_policy?: boolean
   kev?: boolean
   fixable?: boolean
+  wg_listed?: boolean
   sort?: 'priority' | 'criticality' | 'name' | 'findings'
   limit?: number
   offset?: number

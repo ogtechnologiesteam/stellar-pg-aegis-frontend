@@ -88,13 +88,13 @@ const CONF_TONE: Record<Confidence, 'emerald' | 'amber' | 'slate'> = { confirmed
 const CONF_HELP: Record<Confidence, string> = {
   confirmed: 'Exact version from a verified SBOM',
   possible: 'Only a version range is known; shown for the lowest matching version',
-  inferred: 'Dependency inferred from registry crawl, not a submitted SBOM',
+  inferred: 'Dependency inferred by PG Atlas registry crawl, not a submitted SBOM',
 }
 
 export function ConfidencePill({ confidence }: { confidence: Confidence }) {
   return (
     <Pill tone={CONF_TONE[confidence]} title={CONF_HELP[confidence]} className="capitalize">
-      {confidence}
+      {confidence === 'inferred' ? 'PG Atlas inferred' : confidence}
     </Pill>
   )
 }

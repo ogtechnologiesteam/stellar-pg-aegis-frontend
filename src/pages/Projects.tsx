@@ -6,6 +6,7 @@ import { Card, EmptyState, ErrorState, PageHeader, Pill, PriorityMeter, Segmente
 import { STATUS_LABEL } from '../lib/format'
 
 type PolicyFilter = 'all' | 'present' | 'missing'
+type ScopeFilter = 'all' | 'pg'
 type Sort = NonNullable<ProjectQuery['sort']>
 
 export default function Projects() {
@@ -14,6 +15,7 @@ export default function Projects() {
   const search = params.get('search') ?? ''
   const status = (params.get('status') ?? '') as ActivityStatus | ''
   const policy = (params.get('policy') ?? 'all') as PolicyFilter
+  const scope = (params.get('scope') ?? 'all') as ScopeFilter
   const sort = (params.get('sort') ?? 'priority') as Sort
   const kev = params.has('kev')
   const fixable = params.has('fixable')
@@ -34,13 +36,14 @@ export default function Projects() {
     has_policy: policy === 'all' ? undefined : policy === 'present',
     kev: kev || undefined,
     fixable: fixable || undefined,
+    wg_listed: scope === 'pg' ? true : undefined,
     sort,
     limit: 200,
   })
 
   return (
     <>
-      <PageHeader eyebrow="Inventory" title="Projects" description="SCF public goods synced from PG Atlas, with each one's open findings, disclosure channels and security practices." />
+      <PageHeader eyebrow="Inventory" title="Projects" description="Stellar ecosystem projects synced from PG Atlas — WG-recognized public goods are badged — with each one's open findings, disclosure channels and security practices." />
 
       <Card className="mb-4 flex flex-col gap-3 p-3 lg:flex-row lg:items-center">
         <div className="relative flex-1">
@@ -55,6 +58,14 @@ export default function Projects() {
             </option>
           ))}
         </select>
+        <Segmented<ScopeFilter>
+          value={scope}
+          onChange={(v) => set('scope', v, 'all')}
+          options={[
+            { value: 'all', label: 'All projects' },
+            { value: 'pg', label: 'Public goods' },
+          ]}
+        />
         <Segmented<PolicyFilter>
           value={policy}
           onChange={(v) => set('policy', v, 'all')}
@@ -123,7 +134,14 @@ export default function Projects() {
                           {p.display_name.replace(/^stellar[\s-]?/i, '').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-slate-100">{p.display_name}</div>
+                          <div className="flex items-center gap-2 font-medium text-slate-100">
+                            {p.display_name}
+                            {p.wg_listed && (
+                              <Pill tone="indigo" title="Recognized Stellar public good — listed by the SCF Public Goods Maintenance WG">
+                                Public good
+                              </Pill>
+                            )}
+                          </div>
                           <div className="text-xs text-slate-500">
                             {p.category ?? 'Uncategorized'} · {p.repo_count} repo{p.repo_count === 1 ? '' : 's'}
                           </div>
