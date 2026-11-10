@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink-950: #070a14;
+  --color-ink-900: #0b1020;
+  --color-ink-850: #0f152a;
+  --color-ink-800: #141b33;
+  --color-ink-700: #1e2747;
+  --color-ink-600: #2b365e;
+
+  --color-sev-critical: #f43f5e;
+  --color-sev-high: #fb923c;
+  --color-sev-medium: #facc15;
+  --color-sev-low: #38bdf8;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-200 antialiased;
+    font-feature-settings: "cv11", "ss01";
+    background-image:
+      radial-gradient(60rem 40rem at 10% -10%, rgb(99 102 241 / 0.14), transparent 60%),
+      radial-gradient(50rem 30rem at 110% 10%, rgb(34 211 238 / 0.08), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  /* Let grid children shrink so long mono values truncate / scroll instead of widening the page */
+  :where(.grid) > * {
+    min-width: 0;
+  }
+
+  ::selection {
+    @apply bg-indigo-500/40 text-white;
+  }
+
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-indigo-400;
+  }
+}
+
+@utility card {
+  @apply rounded-2xl border border-white/[0.06] bg-ink-900/70 shadow-[0_1px_0_0_rgb(255_255_255/0.04)_inset] backdrop-blur-sm;
+}
+
+@utility input {
+  @apply h-10 w-full rounded-xl border border-white/[0.08] bg-ink-850 px-3 text-sm text-slate-100 transition placeholder:text-slate-500 focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-400/20 focus:outline-none;
+}
+
+@utility btn {
+  @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-lg shadow-indigo-500/20 hover:brightness-110;
+}
+
+@utility btn-ghost {
+  @apply btn border border-white/[0.08] bg-white/[0.03] text-slate-200 hover:bg-white/[0.07];
+}
+
+@utility th {
+  @apply px-4 py-3 text-left text-[11px] font-semibold tracking-wider text-slate-500 uppercase;
+}
+
+@utility td {
+  @apply px-4 py-3 align-middle text-sm;
+}
