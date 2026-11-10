@@ -190,7 +190,7 @@ export default function Overview() {
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="size-3.5 text-emerald-400/70" />
-            PG Atlas: {s.pg_atlas.total_projects.toLocaleString()} projects · {s.pg_atlas.total_dependency_edges.toLocaleString()} dependency edges
+            PG Atlas inventory: {s.pg_atlas.total_projects.toLocaleString()} projects · {s.pg_atlas.total_dependency_edges.toLocaleString()} dependency edges — Aegis tracks {s.projects_tracked} public goods
           </span>
           <span>Snapshot generated {relativeTime(s.generated_at)} · sources: {s.sources.join(', ')}</span>
         </div>
