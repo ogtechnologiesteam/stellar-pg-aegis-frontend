@@ -6,9 +6,15 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
 export type ActivityStatus = 'live' | 'in-dev' | 'discontinued' | 'non-responsive'
 export type Confidence = 'confirmed' | 'possible' | 'inferred'
+/** govulncheck call-analysis verdict (Go repos only). Orthogonal to confidence:
+ * 'called' = a call path into a vulnerable symbol exists; 'not-called' = the advisory
+ * matches the repo's modules but no call path was found; 'unflagged' = govulncheck
+ * analyzed the repo at HEAD and did not report the advisory at all (the resolved
+ * module may differ from the PG Atlas edge, or already be patched). */
+export type Reachability = 'called' | 'not-called' | 'unflagged'
 export type FindingStatus = 'open' | 'fixed' | 'withdrawn' | 'ignored'
 export type Resolution = 'exact' | 'range'
-export type EdgeSource = 'verified-sbom' | 'inferred-shadow'
+export type EdgeSource = 'verified-sbom' | 'inferred-shadow' | 'govulncheck'
 export type ChannelKind = 'pvr' | 'email' | 'url' | 'bounty' | 'security_txt' | 'policy' | 'other'
 export type ExtractedBy = 'rule' | 'llm' | 'manual'
 
@@ -108,6 +114,10 @@ export interface Finding {
   epss: number | null
   confidence: Confidence
   source: EdgeSource
+  /** null = not analyzed (non-Go, non-GitHub, or govulncheck unavailable/failed). */
+  reachability: Reachability | null
+  /** For 'called': "pkg.VulnFunc ← entrypkg.caller" from the govulncheck trace. */
+  reachability_trace: string | null
   status: FindingStatus
   priority: number
   priority_breakdown: PriorityBreakdown
@@ -202,6 +212,8 @@ export interface EcosystemSummary {
   affected_projects: number
   kev_findings: number
   fixable_findings: number
+  /** govulncheck verdict counts across Go findings. null = call analysis never ran. */
+  reachability: Record<Reachability, number> | null
   median_fixable_advisory_age_days: number | null
   dependencies_total: number
   dependencies_resolved: number
@@ -217,6 +229,8 @@ export interface ProjectQuery {
   has_policy?: boolean
   kev?: boolean
   fixable?: boolean
+  /** Has ≥1 finding where govulncheck found a call path into a vulnerable symbol. */
+  reachable?: boolean
   wg_listed?: boolean
   sort?: 'priority' | 'criticality' | 'name' | 'findings'
   limit?: number

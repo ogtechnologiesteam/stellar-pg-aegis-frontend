@@ -18,6 +18,7 @@ const SOURCES = [
   ['security.txt', 'RFC 9116 file fetched at /.well-known/security.txt on each project website (non-GitHub). Presence is verified by a Contact: field; adds a ranked disclosure channel and a hygiene check.'],
   ['OpenSSF Scorecard', 'Overall repo score where Scorecard has scanned the repository.'],
   ['CISA KEV · FIRST EPSS', 'Exploitation signals used for prioritization.'],
+  ['govulncheck', 'Go call analysis — clones repos with Go findings at HEAD and checks whether their code calls the symbols each advisory names (reachability: called / not-called / unflagged).'],
 ]
 
 const DISCLOSURE_RANKING = [

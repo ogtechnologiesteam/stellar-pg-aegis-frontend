@@ -9,12 +9,14 @@
  *   GitHub        → SECURITY.md, private vulnerability reporting, published advisories,
  *                   Dependabot / Renovate config (requires GITHUB_TOKEN; skipped otherwise)
  *   Scorecard     → OpenSSF Scorecard overall score
+ *   govulncheck   → Go call analysis: shallow-clones repos with Go findings and checks
+ *                   whether their code calls the vulnerable symbols (reachability)
  *
  * Usage: GITHUB_TOKEN=... node scripts/build-snapshot.ts
- * Env:   PG_ATLAS_API (default: https://api.pgatlas.xyz)
+ * Env:   PG_ATLAS_API (default: https://api.pgatlas.xyz), GITHUB_TOKEN, GH_MAX_REPOS,
+ *        GOVC=0 disables call analysis, GOVC_MAX_REPOS caps cloned Go repos
  */
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
@@ -29,14 +31,17 @@ import type {
   PgAtlasMetadata,
   ProjectDetail,
   PublishedAdvisory,
+  Reachability,
   Repo,
   Resolution,
-  Severity,
   SeverityCounts,
   Snapshot,
   Vuln,
 } from '../src/api/types.ts'
 import { computePriority, logNorm } from '../src/lib/priority.ts'
+import { affectedFor, fetchOsv, LABEL, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
+import { CACHE_DIR, cacheGet, cachePath, cacheSet, log } from './cache.ts'
+import { CLONES_DIR, ghKey, ghRepoOf, govcBinary, govcRepo, GOVC_MAX, GOVC_REPOS, type ReachVerdicts } from './govulncheck.ts'
 
 const PG = (process.env.PG_ATLAS_API ?? 'https://api.pgatlas.xyz').replace(/\/$/, '')
 const WG_SITE = 'https://scf-public-goods-maintenance.github.io'
@@ -47,7 +52,6 @@ const MAX_DEPTH = 3
 
 // ---------------------------------------------------------------- helpers
 
-const log = (...a: unknown[]) => console.error('[snapshot]', ...a)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // PG Atlas allows 100 req/min per IP (docs: pg-atlas/security). Space requests to stay under it.
@@ -60,30 +64,20 @@ async function pgThrottle() {
   if (slot > now) await sleep(slot - now)
 }
 
-// Disk cache so re-runs within CACHE_TTL reuse fetched responses (PG Atlas GETs and
-// per-repo GitHub/Scorecard lookups). GitHub responses use their own TTL so enrichment
-// stays fresh without re-crawling the graph.
-const CACHE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '.cache')
+// Disk cache (./cache.ts) so re-runs within CACHE_TTL reuse fetched responses (PG
+// Atlas GETs and per-repo GitHub/Scorecard lookups). GitHub responses use their own
+// TTL so enrichment stays fresh without re-crawling the graph.
 const CACHE_TTL_MS = 24 * 3600_000
 const GH_TTL_MS = 72 * 3600_000
-const cachePath = (url: string) => resolve(CACHE_DIR, `${createHash('sha1').update(url).digest('hex')}.json`)
-
-async function cacheGet<T>(url: string, ttl: number): Promise<T | null | undefined> {
-  try {
-    const file = cachePath(url)
-    if (Date.now() - (await stat(file)).mtimeMs < ttl) return JSON.parse(await readFile(file, 'utf8')) as T | null
-  } catch {
-    /* cache miss */
-  }
-  return undefined
-}
-const cacheSet = (url: string, body: unknown) => writeFile(cachePath(url), JSON.stringify(body ?? null))
 
 async function http<T>(url: string, init: RequestInit = {}, { allow404 = false, retries = 3 } = {}): Promise<T | null> {
   const isPg = url.startsWith(PG)
   const cacheable = isPg && !init.method
+  // Cache PG Atlas responses under the canonical host so PG_ATLAS_API mirrors
+  // (e.g. the DigitalOcean app URL) reuse the same on-disk entries.
+  const cacheKey = isPg ? url.replace(PG, 'https://api.pgatlas.xyz') : url
   if (cacheable) {
-    const hit = await cacheGet<T | null>(url, CACHE_TTL_MS)
+    const hit = await cacheGet<T | null>(cacheKey, CACHE_TTL_MS)
     if (hit !== undefined) return hit
   }
   for (let attempt = 0; ; attempt++) {
@@ -91,12 +85,12 @@ async function http<T>(url: string, init: RequestInit = {}, { allow404 = false, 
       if (isPg) await pgThrottle()
       const res = await fetch(url, { ...init, signal: AbortSignal.timeout(45_000) })
       if (res.status === 404 && allow404) {
-        if (cacheable) await writeFile(cachePath(url), 'null')
+        if (cacheable) await writeFile(cachePath(cacheKey), 'null')
         return null
       }
       if (res.ok) {
         const body = (await res.json()) as T
-        if (cacheable) await writeFile(cachePath(url), JSON.stringify(body))
+        if (cacheable) await writeFile(cachePath(cacheKey), JSON.stringify(body))
         return body
       }
       if (res.status === 429 && attempt < 8) {
@@ -228,109 +222,9 @@ function resolveVersion(range: string | null): { version: string; resolution: Re
   return m ? { version: m[1], resolution: 'range' } : null
 }
 
-const UPGRADE_HINT: Record<string, (p: string, v: string) => string> = {
-  npm: (p, v) => `npm install ${p}@${v}`,
-  'crates.io': (p, v) => `cargo update -p ${p} --precise ${v}`,
-  PyPI: (p, v) => `pip install '${p}>=${v}'`,
-  Maven: (p, v) => `Set ${p} to ${v} in build.gradle / pom.xml`,
-  Go: (p, v) => `go get ${p}@${v.startsWith('v') ? v : `v${v}`}`,
-  Pub: (p, v) => `dart pub upgrade ${p}  # constraint ^${v}`,
-  Packagist: (p, v) => `composer require ${p}:^${v}`,
-  NuGet: (p, v) => `dotnet add package ${p} --version ${v}`,
-  RubyGems: (p, v) => `bundle update ${p}  # >= ${v}`,
-  'GitHub Actions': (p, v) => `uses: ${p}@v${v.replace(/^v/, '')}`,
-}
-
-// ---------------------------------------------------------------- CVSS v3 base score
-
-function cvss3(vector: string): number | null {
-  if (!/^CVSS:3\.[01]\//.test(vector)) return null
-  const m = Object.fromEntries(vector.split('/').slice(1).map((p) => p.split(':')))
-  const W = {
-    AV: { N: 0.85, A: 0.62, L: 0.55, P: 0.2 },
-    AC: { L: 0.77, H: 0.44 },
-    UI: { N: 0.85, R: 0.62 },
-    CIA: { H: 0.56, L: 0.22, N: 0 },
-  } as const
-  const changed = m.S === 'C'
-  const pr = ({ N: 0.85, L: changed ? 0.68 : 0.62, H: changed ? 0.5 : 0.27 } as Record<string, number>)[m.PR]
-  const av = (W.AV as Record<string, number>)[m.AV]
-  const ac = (W.AC as Record<string, number>)[m.AC]
-  const ui = (W.UI as Record<string, number>)[m.UI]
-  const [c, i, a] = [m.C, m.I, m.A].map((x) => (W.CIA as Record<string, number>)[x])
-  if ([pr, av, ac, ui, c, i, a].some((x) => x === undefined)) return null
-  const iss = 1 - (1 - c) * (1 - i) * (1 - a)
-  const impact = changed ? 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15 : 6.42 * iss
-  if (impact <= 0) return 0
-  const exploit = 8.22 * av * ac * pr * ui
-  const roundUp = (x: number) => Math.ceil(x * 10 - 1e-9) / 10
-  return roundUp(Math.min(changed ? 1.08 * (impact + exploit) : impact + exploit, 10))
-}
-
-const labelFromScore = (s: number): Severity => (s >= 9 ? 'critical' : s >= 7 ? 'high' : s >= 4 ? 'medium' : s > 0 ? 'low' : 'unknown')
-const LABEL: Record<string, Severity> = { CRITICAL: 'critical', HIGH: 'high', MODERATE: 'medium', MEDIUM: 'medium', LOW: 'low' }
-
-// ---------------------------------------------------------------- OSV
-
-interface OsvEvent {
-  introduced?: string
-  fixed?: string
-  last_affected?: string
-}
-interface OsvVuln {
-  id: string
-  summary?: string
-  details?: string
-  aliases?: string[]
-  published?: string
-  modified?: string
-  withdrawn?: string
-  severity?: { type: string; score: string }[]
-  database_specific?: { severity?: string }
-  affected?: { package?: { name: string; ecosystem: string }; ranges?: { type: string; events: OsvEvent[] }[]; versions?: string[]; database_specific?: { severity?: string }; ecosystem_specific?: { severity?: string } }[]
-  references?: { type: string; url: string }[]
-}
-
-function affectedFor(v: OsvVuln, ecosystem: string, name: string) {
-  const entries = (v.affected ?? []).filter((a) => a.package?.ecosystem === ecosystem && a.package.name.toLowerCase() === name.toLowerCase())
-  const fixed = new Set<string>()
-  const ranges: string[] = []
-  for (const a of entries) {
-    for (const r of a.ranges ?? []) {
-      if (r.type === 'GIT') continue
-      let lo: string | undefined
-      for (const e of r.events) {
-        if (e.introduced !== undefined) lo = e.introduced
-        if (e.fixed !== undefined || e.last_affected !== undefined) {
-          if (e.fixed) fixed.add(e.fixed)
-          const hi = e.fixed ? `<${e.fixed}` : `<=${e.last_affected}`
-          ranges.push(lo && lo !== '0' ? `>=${lo} ${hi}` : hi)
-          lo = undefined
-        }
-      }
-      if (lo !== undefined) ranges.push(lo === '0' ? 'all versions' : `>=${lo}`)
-    }
-    if (!a.ranges?.length && a.versions?.length) ranges.push(`${a.versions.length} listed versions`)
-  }
-  return { fixed: [...fixed], range: ranges.join(' || ') || 'see advisory' }
-}
-
-function severityOf(v: OsvVuln): { severity: Severity; cvss: number | null; vector: string | null } {
-  const vector = v.severity?.find((s) => s.type === 'CVSS_V3')?.score ?? v.severity?.[0]?.score ?? null
-  const score = vector ? cvss3(vector) : null
-  const label = v.database_specific?.severity ?? v.affected?.find((a) => a.database_specific?.severity || a.ecosystem_specific?.severity)?.database_specific?.severity
-  const severity = (label && LABEL[label.toUpperCase()]) || (score != null ? labelFromScore(score) : 'unknown')
-  return { severity, cvss: score, vector }
-}
-
 // ---------------------------------------------------------------- GitHub
 
 const ghHeaders = { Authorization: `Bearer ${GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'stellar-pg-aegis-snapshot' }
-
-const ghRepoOf = (url: string | null) => {
-  const m = url && /^https?:\/\/github\.com\/([^/]+)\/([^/#?]+)/i.exec(url)
-  return m ? { owner: m[1], name: m[2].replace(/\.git$/, '') } : null
-}
 
 interface GhRepoInfo {
   isArchived: boolean
@@ -626,6 +520,8 @@ async function main() {
           epss: ids.map((c) => epss.get(c)).find((x) => x !== undefined) ?? null,
           confidence,
           source: e.confidence,
+          reachability: null,
+          reachability_trace: null,
           status: 'open',
           fixed_versions: fixed,
           upgrade_hint: fixed[0] ? (UPGRADE_HINT[p.ecosystem]?.(p.name, fixed[0]) ?? null) : null,
@@ -712,6 +608,119 @@ async function main() {
       return { ...f, priority, priority_breakdown: breakdown }
     })
     .sort((a, b) => b.priority - a.priority)
+
+  // ---- govulncheck reachability for Go findings
+  // Clone repos with Go findings (most findings first, GOVC_MAX_REPOS caps), run
+  // `govulncheck -json ./...` per module, annotate reachability on each finding.
+  const govcResults = new Map<string, ReachVerdicts | null>()
+  if (process.env.GOVC === '0') {
+    log('govulncheck: disabled via GOVC=0')
+  } else {
+    const goCount = new Map<string, number>()
+    for (const f of findings) if (f.package.ecosystem === 'Go') goCount.set(f.repo_id, (goCount.get(f.repo_id) ?? 0) + 1)
+    const goTargets = allRepos
+      .map((r) => ({ r, gh: ghRepoOf(r.repo_url), n: goCount.get(r.canonical_id) ?? 0 }))
+      .filter((x): x is { r: PgRepo; gh: { owner: string; name: string }; n: number } => x.n > 0 && !!x.gh && (!GOVC_REPOS || GOVC_REPOS.includes(ghKey(x.gh))))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, GOVC_MAX)
+    const bin = goTargets.length ? await govcBinary() : null
+    if (goTargets.length && !bin) {
+      log('govulncheck: neither govulncheck nor go found — reachability will be "not analyzed"')
+    } else if (bin) {
+      log(`govulncheck: analyzing ${goTargets.length} Go repos${Number.isFinite(GOVC_MAX) ? ` (capped)` : ''} — this is slow on first run, cached per commit`)
+      await mkdir(CLONES_DIR, { recursive: true })
+      await pool(goTargets, 3, async ({ r, gh }) => {
+        govcResults.set(r.canonical_id, await govcRepo(bin, gh, r.repo_url!))
+      })
+      const analyzed = [...govcResults.values()].filter(Boolean).length
+      const calls = [...govcResults.values()].flatMap((m) => [...(m?.values() ?? [])]).filter((v) => v.v === 'called').length
+      log(`govulncheck: ${analyzed}/${goTargets.length} repos analyzed · ${calls} vulnerabilities with a call path`)
+    }
+    for (const f of findings) {
+      if (f.package.ecosystem !== 'Go') continue
+      const per = govcResults.get(f.repo_id)
+      if (!per) continue // not a target, capped out, or analysis failed
+      // govulncheck reports canonical GO- ids; our finding may key on a GHSA alias.
+      const hits = [f.vuln_id, ...(osv.get(f.vuln_id)?.aliases ?? [])].map((c) => per.get(c)).filter((x): x is NonNullable<ReturnType<typeof per.get>> => !!x)
+      const hit = hits.find((h) => h.v === 'called') ?? hits[0]
+      f.reachability = hit?.v ?? 'unflagged'
+      f.reachability_trace = hit?.t ?? null
+    }
+
+    // Emit new findings for advisories govulncheck reports but edge matching missed —
+    // versions come from the repo's own resolved go.mod (strongest version evidence).
+    const pend: { vid: string; r: PgRepo; g: { v: Reachability; t: string | null; m: string | null; v2: string | null } }[] = []
+    const toFetch = new Set<string>()
+    for (const [repoId, per] of govcResults) {
+      if (!per) continue
+      const r = repoById.get(repoId)
+      if (!r) continue
+      const matched = new Set(rawFindings.filter((f) => f.repo_id === repoId).flatMap((f) => [f.vuln_id, ...(osv.get(f.vuln_id)?.aliases ?? [])]))
+      for (const [osvId, g] of per) {
+        if (matched.has(osvId) || !g.m || !g.v2) continue
+        pend.push({ vid: osvId, r, g })
+        toFetch.add(osvId)
+      }
+    }
+    if (toFetch.size) {
+      log(`govulncheck: ${toFetch.size} advisories reported that edge matching missed`)
+      await pool([...toFetch], 10, async (id) => {
+        const v = await fetchOsv(id)
+        if (v && !v.withdrawn) osv.set(id, v)
+      })
+      let emitted = 0
+      for (const { vid, r, g } of pend) {
+        const o = osv.get(vid)
+        if (!o) continue
+        const proj = pgProjects[repoOwner.get(r.canonical_id)!]
+        let { severity, cvss } = severityOf(o)
+        if (severity === 'unknown') {
+          const ghsa = await fetchOsv(o.aliases?.find((a) => a.startsWith('GHSA-')) ?? '')
+          if (ghsa) ({ severity, cvss } = severityOf(ghsa))
+        }
+        const ids = cveOf(o)
+        const { fixed } = affectedFor(o, 'Go', g.m!)
+        const { priority, breakdown } = computePriority({
+          severity,
+          cvss,
+          criticality: logNorm(r.criticality_score, maxCrit),
+          kev: ids.some((c) => kev.has(c)),
+          epss: ids.map((c) => epss.get(c)).find((x) => x !== undefined) ?? null,
+          reach: logNorm(reachOf.get(r.canonical_id) ?? 0, maxReach),
+          fixAvailable: fixed.length > 0,
+          confidence: 'confirmed',
+        })
+        findings.push({
+          id: `${vid}|${r.canonical_id}|govulncheck`,
+          repo_id: r.canonical_id,
+          repo_name: r.display_name,
+          project_id: proj.canonical_id,
+          project_name: proj.display_name,
+          vuln_id: vid,
+          summary: o.summary || o.details?.split('\n')[0]?.slice(0, 160) || vid,
+          package: { purl: `pkg:golang/${g.m}@${g.v2}`, name: g.m!, ecosystem: 'Go', version: g.v2!, version_range: g.v2!, resolution: 'exact' },
+          severity,
+          cvss,
+          kev: ids.some((c) => kev.has(c)),
+          epss: ids.map((c) => epss.get(c)).find((x) => x !== undefined) ?? null,
+          confidence: 'confirmed',
+          source: 'govulncheck',
+          reachability: g.v,
+          reachability_trace: g.t,
+          status: 'open',
+          fixed_versions: fixed,
+          upgrade_hint: fixed[0] ? (UPGRADE_HINT.Go?.(g.m!, fixed[0]) ?? null) : null,
+          advisory_published: o.published ?? null,
+          priority,
+          priority_breakdown: breakdown,
+        })
+        ;(exposures[vid] ??= []).push({ repo_id: r.canonical_id, repo_name: r.display_name, project_id: proj.canonical_id, project_name: proj.display_name, depth: 1, via: null, criticality_score: r.criticality_score, confidence: 'confirmed' })
+        emitted++
+      }
+      findings.sort((a, b) => b.priority - a.priority)
+      log(`govulncheck: emitted ${emitted} new findings`)
+    }
+  }
 
   // ---- GitHub enrichment
   // Coverage is incremental: repos with findings first, then by stars. Results are cached
@@ -954,13 +963,16 @@ async function main() {
     affected_projects: new Set(findings.map((f) => f.project_id)).size,
     kev_findings: findings.filter((f) => f.kev).length,
     fixable_findings: findings.filter((f) => f.fixed_versions.length > 0).length,
+    reachability: govcResults.size
+      ? findings.reduce((a, f) => (f.reachability ? { ...a, [f.reachability]: a[f.reachability] + 1 } : a), { called: 0, 'not-called': 0, unflagged: 0 } as Record<Reachability, number>)
+      : null,
     median_fixable_advisory_age_days: median(fixableAges) !== null ? Math.round(median(fixableAges)!) : null,
     dependencies_total: depsTotal,
     dependencies_resolved: depsResolved,
     by_ecosystem: [...ecoMap.entries()].map(([ecosystem, v]) => ({ ecosystem, findings: v.findings, repos: v.repos.size })).sort((a, b) => b.findings - a.findings),
     pg_atlas: metadata,
     generated_at: NOW,
-    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : [])],
+    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : []), ...(govcResults.size ? ['govulncheck'] : [])],
   }
 
   const snapshot: Snapshot = { summary, projects, vulns, exposures }

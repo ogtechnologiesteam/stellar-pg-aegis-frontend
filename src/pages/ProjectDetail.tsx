@@ -1,5 +1,5 @@
-import { Link, useParams } from 'react-router'
-import { Archive, ArrowLeft, ExternalLink, FileWarning, GitFork, Github, Globe, Siren, Star, Users } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router'
+import { Archive, ArrowLeft, ExternalLink, FileWarning, GitFork, Github, Globe, Siren, Star, Users, X } from 'lucide-react'
 import { useProject } from '../api'
 import { ApiError } from '../api/client'
 import { DisclosureChannels } from '../components/DisclosureCard'
@@ -9,6 +9,8 @@ import { relativeTime, totalFindings } from '../lib/format'
 
 export default function ProjectDetail() {
   const { id = '' } = useParams()
+  const [params, setParams] = useSearchParams()
+  const reach = params.has('reach')
   const { data: p, error, isLoading } = useProject(id)
 
   if (error instanceof ApiError && error.status === 404) return <EmptyState title="Project not found" description={`No project with id “${id}”.`} />
@@ -26,6 +28,7 @@ export default function ProjectDetail() {
   }
 
   const h = p.hygiene
+  const visibleFindings = reach ? p.findings.filter((f) => f.reachability === 'called') : p.findings
 
   return (
     <>
@@ -97,8 +100,16 @@ export default function ProjectDetail() {
       </div>
 
       <Card className="mb-4">
-        <CardHeader title="Findings" subtitle="Click a row for remediation steps and the priority breakdown" icon={<FileWarning className="size-4" />} />
-        <FindingsTable findings={p.findings} />
+        <CardHeader title="Findings" subtitle={reach ? `Showing ${visibleFindings.length} findings where govulncheck confirmed a call path into vulnerable code` : 'Click a row for remediation steps and the priority breakdown'} icon={<FileWarning className="size-4" />} />
+        {reach && (
+          <div className="flex items-center gap-2 border-b border-white/[0.05] px-5 py-2.5 text-xs text-slate-500">
+            Showing
+            <button onClick={() => setParams((x) => { x.delete('reach'); return x }, { replace: true })} className="inline-flex items-center gap-1.5 rounded-md bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 ring-1 ring-fuchsia-500/25 ring-inset transition hover:bg-fuchsia-500/20">
+              findings calling vulnerable code <X className="size-3" />
+            </button>
+          </div>
+        )}
+        <FindingsTable findings={visibleFindings} />
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">

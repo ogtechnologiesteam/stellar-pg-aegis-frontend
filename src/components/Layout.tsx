@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { BookA, BookOpen, Boxes, LayoutDashboard, Menu, Moon, Search, ShieldAlert, Siren, Sun, X } from 'lucide-react'
+import { BookA, BookOpen, Boxes, Ellipsis, LayoutDashboard, Menu, Moon, Search, ShieldAlert, Siren, Sun, X } from 'lucide-react'
 import { api, useSummary } from '../api'
 
 const NAV = [
@@ -11,6 +11,13 @@ const NAV = [
   { to: '/disclose', label: 'Report a vulnerability', icon: Siren },
   { to: '/methodology', label: 'Methodology', icon: BookOpen },
   { to: '/glossary', label: 'Glossary', icon: BookA },
+]
+
+const BOTTOM_NAV = [
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/projects', label: 'Projects', icon: Boxes },
+  { to: '/advisories', label: 'Advisories', icon: ShieldAlert },
+  { to: '/disclose', label: 'Report', icon: Siren },
 ]
 
 export function Logo() {
@@ -127,8 +134,23 @@ export function Layout() {
   const { pathname } = useLocation()
 
   useEffect(() => {
+    setOpen(false)
     window.scrollTo({ top: 0 })
   }, [pathname])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [open])
 
   return (
     <div className="flex min-h-screen">
@@ -137,10 +159,10 @@ export function Layout() {
       </aside>
 
       {open && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 border-r border-white/[0.06] bg-ink-900">
-            <button className="absolute top-4 right-3 grid size-8 cursor-pointer place-items-center rounded-lg text-slate-400 hover:bg-white/5" onClick={() => setOpen(false)} aria-label="Close menu">
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Site navigation">
+          <div className="absolute inset-0 animate-fade-in bg-black/60 backdrop-blur-sm motion-reduce:animate-none" onClick={() => setOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] animate-drawer-in border-r border-white/[0.06] bg-ink-900 motion-reduce:animate-none">
+            <button autoFocus className="absolute top-4 right-3 grid size-8 cursor-pointer place-items-center rounded-lg text-slate-400 hover:bg-white/5" onClick={() => setOpen(false)} aria-label="Close menu">
               <X className="size-4" />
             </button>
             <Sidebar onNavigate={() => setOpen(false)} />
@@ -148,7 +170,27 @@ export function Layout() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.06] bg-ink-950/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+        <div className="grid grid-cols-5">
+          {BOTTOM_NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) => clsx('flex flex-col items-center gap-1 pt-2 pb-1.5 text-[10px] font-medium transition', isActive ? 'text-indigo-300' : 'text-slate-500')}
+            >
+              <Icon className="size-5" />
+              {label}
+            </NavLink>
+          ))}
+          <button type="button" onClick={() => setOpen(true)} className="flex cursor-pointer flex-col items-center gap-1 pt-2 pb-1.5 text-[10px] font-medium text-slate-500 transition" aria-label="Open menu">
+            <Ellipsis className="size-5" />
+            More
+          </button>
+        </div>
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/[0.05] bg-ink-950/70 px-4 backdrop-blur-xl md:px-8">
           <button className="grid size-9 cursor-pointer place-items-center rounded-lg text-slate-300 hover:bg-white/5 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="size-5" />
@@ -167,10 +209,10 @@ export function Layout() {
             )}
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 md:px-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">
           <Outlet />
         </main>
-        <footer className="border-t border-white/[0.04] px-8 py-5 text-xs text-slate-600">
+        <footer className="border-t border-white/[0.04] px-4 py-5 text-xs text-slate-600 md:px-8">
           Stellar PG Aegis surfaces only publicly disclosed vulnerability data. Never report vulnerabilities in public issues.
         </footer>
       </div>

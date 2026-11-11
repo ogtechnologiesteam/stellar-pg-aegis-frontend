@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Github, Search, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import type { ActivityStatus, ProjectQuery } from '../api/types'
 import { useProjects } from '../api'
@@ -19,6 +19,7 @@ export default function Projects() {
   const sort = (params.get('sort') ?? 'priority') as Sort
   const kev = params.has('kev')
   const fixable = params.has('fixable')
+  const reachable = params.has('reach')
 
   const set = (k: string, v: string, fallback = '') =>
     setParams(
@@ -36,6 +37,7 @@ export default function Projects() {
     has_policy: policy === 'all' ? undefined : policy === 'present',
     kev: kev || undefined,
     fixable: fixable || undefined,
+    reachable: reachable || undefined,
     wg_listed: scope === 'pg' ? true : undefined,
     sort,
     limit: 200,
@@ -83,9 +85,14 @@ export default function Projects() {
         </select>
       </Card>
 
-      {(kev || fixable) && (
+      {(kev || fixable || reachable) && (
         <div className="mb-4 -mt-1 flex items-center gap-2 text-xs text-slate-500">
           Showing
+          {reachable && (
+            <button onClick={() => set('reach', '')} className="inline-flex items-center gap-1.5 rounded-md bg-fuchsia-500/10 px-2 py-0.5 font-medium text-fuchsia-300 ring-1 ring-fuchsia-500/25 ring-inset transition hover:bg-fuchsia-500/20">
+              projects calling vulnerable code <X className="size-3" />
+            </button>
+          )}
           {kev && (
             <button onClick={() => set('kev', '')} className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 px-2 py-0.5 font-medium text-rose-300 ring-1 ring-rose-500/25 ring-inset transition hover:bg-rose-500/20">
               projects with KEV findings <X className="size-3" />
@@ -111,8 +118,63 @@ export default function Projects() {
         ) : !data?.items.length ? (
           <EmptyState title="No projects match your filters" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+          <>
+            <ul className="divide-y divide-white/[0.04] md:hidden">
+              {data.items.map((p) => (
+                <li key={p.canonical_id}>
+                  <Link to={`/projects/${encodeURIComponent(p.canonical_id)}${reachable ? '?reach=1' : ''}`} className="block px-4 py-3.5 transition active:bg-white/[0.03]">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500/25 to-cyan-500/10 text-sm font-semibold text-indigo-100 ring-1 ring-white/10">
+                        {p.display_name.replace(/^stellar[\s-]?/i, '').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 font-medium text-slate-100">
+                          <span className="truncate">{p.display_name}</span>
+                          {p.wg_listed && (
+                            <Pill tone="indigo" title="Recognized Stellar public good — listed by the SCF Public Goods Maintenance WG">
+                              Public good
+                            </Pill>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {p.category ?? 'Uncategorized'} · {p.repo_count} repo{p.repo_count === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      <StatusPill status={p.activity_status} />
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {p.hygiene.has_security_policy ? (
+                        <Pill tone="emerald">
+                          <ShieldCheck className="size-3" /> Policy
+                        </Pill>
+                      ) : p.hygiene.has_security_policy === false ? (
+                        <Pill tone="amber">
+                          <ShieldOff className="size-3" /> No policy
+                        </Pill>
+                      ) : (
+                        <Pill title="GitHub disclosure checks haven't covered this repo yet — unknown means not checked, not absent">Unknown</Pill>
+                      )}
+                      {p.hygiene.pvr_enabled && (
+                        <Pill tone="cyan">
+                          <Github className="size-3" /> PVR
+                        </Pill>
+                      )}
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <SeverityStack counts={p.open_findings} />
+                      <span className="ml-auto flex items-center gap-3 font-mono text-[11px] text-slate-500 tabular-nums">
+                        <span title="PG Atlas criticality — transitive in-ecosystem dependents">{p.criticality_score ?? '—'} dep</span>
+                        <span title="Pony factor — maintainers authoring most commits">{p.pony_factor ?? '—'} pony</span>
+                        <span title="OpenSSF Scorecard overall">{p.hygiene.scorecard_overall?.toFixed(1) ?? '—'}</span>
+                        <PriorityMeter value={p.max_priority} />
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[900px]">
               <thead className="border-b border-white/[0.05]">
                 <tr>
                   <th className="th">Project</th>
@@ -127,7 +189,7 @@ export default function Projects() {
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
                 {data.items.map((p) => (
-                  <tr key={p.canonical_id} className="cursor-pointer transition hover:bg-white/[0.025]" onClick={() => navigate(`/projects/${encodeURIComponent(p.canonical_id)}`)}>
+                  <tr key={p.canonical_id} className="cursor-pointer transition hover:bg-white/[0.025]" onClick={() => navigate(`/projects/${encodeURIComponent(p.canonical_id)}${reachable ? '?reach=1' : ''}`)}>
                     <td className="td">
                       <div className="flex items-center gap-3">
                         <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500/25 to-cyan-500/10 text-sm font-semibold text-indigo-100 ring-1 ring-white/10">
@@ -191,9 +253,10 @@ export default function Projects() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
             <div className="border-t border-white/[0.04] px-5 py-3 text-xs text-slate-500">{data.total} projects</div>
-          </div>
+          </>
         )}
       </Card>
     </>

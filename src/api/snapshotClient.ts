@@ -22,11 +22,12 @@ const matches = (haystack: string, needle?: string) => !needle || haystack.toLow
 export const snapshotClient: AegisApi = {
   mode: 'snapshot',
   getSummary: async () => (await loadSnapshot()).summary,
-  listProjects: async ({ search, activity_status, has_policy, kev, fixable, wg_listed, sort = 'priority', limit, offset } = {}) => {
+  listProjects: async ({ search, activity_status, has_policy, kev, fixable, reachable, wg_listed, sort = 'priority', limit, offset } = {}) => {
     const { projects } = await loadSnapshot()
     const items = projects
       .filter((p) => !kev || p.findings.some((f) => f.kev))
       .filter((p) => !fixable || p.findings.some((f) => f.fixed_versions.length > 0))
+      .filter((p) => !reachable || p.findings.some((f) => f.reachability === 'called'))
       .filter((p) => wg_listed === undefined || p.wg_listed === wg_listed)
       .map(toSummary)
       .filter((p) => matches(`${p.display_name} ${p.canonical_id} ${p.category ?? ''}`, search))

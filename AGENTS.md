@@ -36,6 +36,16 @@ Verification before finishing a change: `npm run lint && npm run build`.
   in `scripts/.cache/` (PG responses 24h, GitHub/Scorecard 72h) so refreshes resume.
   `GH_MAX_REPOS=<n>` caps GitHub enrichment per run (repos with findings first, then by stars);
   unenriched repos show as "unknown" in the UI.
+  govulncheck call analysis (Go repos with findings, most findings first): shallow-clones into
+  `scripts/.cache/clones/`, runs `govulncheck -json ./...` per `go.mod`, and annotates each
+  finding `reachability` (called / not-called / unflagged; `null` = not analyzed). Verdicts are
+  cached per commit SHA for 30d. Needs `go` + `govulncheck` (auto-`go install`s when `go` is
+  present). `GOVC=0` disables; `GOVC_MAX_REPOS=<n>` caps cloned repos; `GOVC_REPOS=owner/name,...`
+  restricts to specific repos. Shared helpers live in `scripts/cache.ts` and
+  `scripts/govulncheck.ts`; PG Atlas cache keys normalize to the canonical host so
+  `PG_ATLAS_API` mirrors reuse them.
+- `scripts/annotate-reachability.ts` — `npm run data:reachability`: runs the same govulncheck
+  pass against the existing `public/data/snapshot.json` without a full refresh.
 - React Query hooks (`useProjects`, `useVulnExposure`, ...) live in `src/api/index.ts`.
 - Priority weights (spec FR5) live in `src/lib/priority.ts`; severity falls back to the
   advisory label when no CVSS v3 score is computable (`unknown` severity is possible).

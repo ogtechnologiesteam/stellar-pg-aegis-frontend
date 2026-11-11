@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Exposure, Severity } from '../api/types'
 import { SEVERITY_COLOR } from '../lib/format'
@@ -18,6 +18,7 @@ interface Node extends Exposure {
 export function BlastRadius({ pkg, severity, exposures }: { pkg: string; severity: Severity; exposures: Exposure[] }) {
   const navigate = useNavigate()
   const [hover, setHover] = useState<string | null>(null)
+  const pointerType = useRef('mouse')
 
   const { nodes, edges, maxDepth, gap } = useMemo(() => {
     const byDepth = new Map<number, Exposure[]>()
@@ -72,7 +73,22 @@ export function BlastRadius({ pkg, severity, exposures }: { pkg: string; severit
           pkg
         </text>
         {nodes.map((n) => (
-          <g key={n.repo_id} className={n.project_id ? 'cursor-pointer' : ''} onMouseEnter={() => setHover(n.repo_id)} onMouseLeave={() => setHover(null)} onClick={() => n.project_id && navigate(`/projects/${encodeURIComponent(n.project_id)}`)}>
+          <g
+            key={n.repo_id}
+            className="cursor-pointer"
+            onPointerDown={(e) => (pointerType.current = e.pointerType)}
+            onMouseEnter={() => setHover(n.repo_id)}
+            onMouseLeave={() => setHover(null)}
+            onClick={() => {
+              // Touch synthesizes mouseenter before click, so gate on pointerType:
+              // first tap reveals the node details, second tap navigates.
+              if (pointerType.current === 'touch' && hover !== n.repo_id) {
+                setHover(n.repo_id)
+              } else if (n.project_id) {
+                navigate(`/projects/${encodeURIComponent(n.project_id)}`)
+              }
+            }}
+          >
             <circle cx={n.x} cy={n.y} r={n.r + 6} fill={DEPTH_COLOR[Math.min(n.depth - 1, 2)]} opacity={hover === n.repo_id ? 0.25 : 0.1} />
             <circle cx={n.x} cy={n.y} r={n.r} fill="var(--color-ink-850)" stroke={DEPTH_COLOR[Math.min(n.depth - 1, 2)]} strokeWidth={2} strokeDasharray={n.project_id ? undefined : '3 3'} />
             <text x={n.x} y={n.y + n.r + 14} textAnchor="middle" fill={hover === n.repo_id ? 'var(--color-slate-100)' : 'var(--color-slate-400)'} fontSize="10.5">

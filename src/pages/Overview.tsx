@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { ArrowRight, Boxes, Flame, GitBranch, ShieldAlert, ShieldCheck, Timer, Wrench } from 'lucide-react'
+import { ArrowRight, Boxes, Crosshair, Flame, GitBranch, ShieldAlert, ShieldCheck, Timer, Wrench } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useFindings, useProjects, useSummary, useVulns } from '../api'
 import { CoverageRing, SeverityDonut } from '../components/charts'
@@ -32,6 +32,7 @@ export default function Overview() {
   const kevProjects = useProjects({ kev: true, limit: 1 })
   const fixableProjects = useProjects({ fixable: true, limit: 1 })
   const pgProjects = useProjects({ wg_listed: true, limit: 1 })
+  const reachableProjects = useProjects({ reachable: true, limit: 1 })
 
   if (summary.error) return <ErrorState error={summary.error} />
   const s = summary.data
@@ -55,7 +56,7 @@ export default function Overview() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-4 ${s?.reachability ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
         {!s ? (
           Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)
         ) : (
@@ -64,6 +65,9 @@ export default function Overview() {
             <Kpi icon={<Flame className="size-4" />} label="Known exploited (KEV)" value={s.kev_findings} hint={`Actively exploited in the wild · across ${kevProjects.data?.total ?? '…'} projects`} accent="#fb923c" to="/projects?kev=1" />
             <Kpi icon={<Wrench className="size-4" />} label="Fixable now" value={s.fixable_findings} hint={`A patched version exists upstream · across ${fixableProjects.data?.total ?? '…'} projects`} accent="#34d399" to="/projects?fixable=1" />
             <Kpi icon={<Timer className="size-4" />} label="Median advisory age" value={s.median_fixable_advisory_age_days != null ? `${s.median_fixable_advisory_age_days}d` : '—'} hint={`Snapshot ${relativeTime(s.generated_at)}`} accent="#818cf8" to="/advisories?sort=oldest" />
+            {s.reachability && (
+              <Kpi icon={<Crosshair className="size-4" />} label="Calls vulnerable code" value={s.reachability.called} hint={`call paths into vulnerable code confirmed — govulncheck + manual review · ${s.reachability['not-called'] + s.reachability.unflagged} cleared · across ${reachableProjects.data?.total ?? '…'} projects`} accent="#e879f9" to="/projects?reach=1" />
+            )}
           </>
         )}
       </div>
@@ -83,7 +87,7 @@ export default function Overview() {
                     <div className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-cyan-400" style={{ width: `${(e.findings / ecoMax) * 100}%` }} />
                   </div>
                   <span className="w-14 text-right font-mono text-xs text-slate-300 tabular-nums">{e.findings}</span>
-                  <span className="w-20 text-right text-xs text-slate-500">{e.repos} repos</span>
+                  <span className="hidden w-20 text-right text-xs text-slate-500 sm:block">{e.repos} repos</span>
                 </div>
               ))
             ) : (

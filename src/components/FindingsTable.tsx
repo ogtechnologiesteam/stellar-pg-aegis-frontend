@@ -5,7 +5,7 @@ import { ChevronRight, Terminal, Wrench } from 'lucide-react'
 import type { Finding, PriorityBreakdown } from '../api/types'
 import { PRIORITY_WEIGHTS } from '../lib/priority'
 import { relativeTime } from '../lib/format'
-import { ConfidencePill, CopyButton, EmptyState, KevBadge, Pill, PriorityMeter, SeverityBadge } from './ui'
+import { ConfidencePill, CopyButton, EmptyState, KevBadge, Pill, PriorityMeter, ReachabilityPill, SeverityBadge } from './ui'
 
 const BREAKDOWN_LABEL: Record<keyof PriorityBreakdown, string> = {
   severity: 'Severity (CVSS)',
@@ -82,6 +82,29 @@ function Remediation({ f }: { f: Finding }) {
           </dd>
           <dt className="text-slate-500">Advisory published</dt>
           <dd className="text-slate-300">{relativeTime(f.advisory_published)}</dd>
+          {f.package.ecosystem === 'Go' && (
+            <>
+              <dt className="text-slate-500">Reachability</dt>
+              <dd className="min-w-0 text-slate-300">
+                {f.reachability === 'called' ? (
+                  <>
+                    calls vulnerable code
+                    {f.reachability_trace && (
+                      <span className="block truncate font-mono text-[11px] text-slate-500" title={f.reachability_trace}>
+                        {f.reachability_trace}
+                      </span>
+                    )}
+                  </>
+                ) : f.reachability === 'not-called' ? (
+                  'no call path found (govulncheck)'
+                ) : f.reachability === 'unflagged' ? (
+                  'not flagged by govulncheck at HEAD'
+                ) : (
+                  'not analyzed'
+                )}
+              </dd>
+            </>
+          )}
         </dl>
       </div>
       <div className="space-y-3">
@@ -97,8 +120,62 @@ export function FindingsTable({ findings, showProject = false, expandable = true
   if (!findings.length) return <EmptyState title="No open findings" description="No known vulnerabilities match this project's dependencies." />
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px]">
+    <>
+      <ul className="divide-y divide-white/[0.04] md:hidden">
+        {findings.map((f) => {
+          const isOpen = open === f.id
+          return (
+            <li key={f.id}>
+              <div className="px-4 py-3.5">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <SeverityBadge severity={f.severity} cvss={f.cvss} />
+                      {f.kev && <KevBadge />}
+                    </div>
+                    <div className="mt-1.5 text-sm text-slate-200">{f.summary}</div>
+                  </div>
+                  <PriorityMeter value={f.priority} />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                  <Link to={`/advisories/${f.vuln_id}`} className="font-mono text-indigo-300 hover:text-indigo-200">
+                    {f.vuln_id}
+                  </Link>
+                  {showProject && (
+                    <Link to={`/projects/${f.project_id}`} className="font-medium text-slate-200 hover:text-white">
+                      {f.project_name}
+                    </Link>
+                  )}
+                  <span className="font-mono text-slate-500">
+                    {f.package.ecosystem}/{f.package.name} {f.package.version}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Pill tone={f.source === 'verified-sbom' ? 'emerald' : f.source === 'govulncheck' ? 'cyan' : 'slate'} title={f.source === 'verified-sbom' ? 'Declared in an SBOM submitted to PG Atlas' : f.source === 'govulncheck' ? 'Detected by govulncheck from the repo’s resolved modules — not present in PG Atlas edges' : 'Inferred from PG Atlas registry crawl'}>
+                    {f.source === 'verified-sbom' ? 'PG Atlas SBOM' : f.source === 'govulncheck' ? 'govulncheck' : 'PG Atlas inferred'}
+                  </Pill>
+                  <ConfidencePill confidence={f.confidence} />
+                  <ReachabilityPill reachability={f.reachability} trace={f.reachability_trace} />
+                  <span className="font-mono text-xs">{f.fixed_versions[0] ? <span className="text-emerald-300">→ {f.fixed_versions[0]}</span> : <span className="text-amber-300">no fix</span>}</span>
+                  {expandable && (
+                    <button type="button" onClick={() => setOpen(isOpen ? null : f.id)} className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 transition hover:bg-white/[0.04] hover:text-indigo-200" aria-expanded={isOpen}>
+                      Details
+                      <ChevronRight className={clsx('size-3.5 transition', isOpen && 'rotate-90')} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {expandable && isOpen && (
+                <div className="border-t border-white/[0.04]">
+                  <Remediation f={f} />
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[760px]">
         <thead className="border-b border-white/[0.05]">
           <tr>
             {expandable && <th className="th w-8" />}
@@ -149,12 +226,15 @@ export function FindingsTable({ findings, showProject = false, expandable = true
                     </div>
                   </td>
                   <td className="td">
-                    <Pill tone={f.source === 'verified-sbom' ? 'emerald' : 'slate'} title={f.source === 'verified-sbom' ? 'Declared in an SBOM submitted to PG Atlas' : 'Inferred from PG Atlas registry crawl'}>
-                      {f.source === 'verified-sbom' ? 'PG Atlas SBOM' : 'PG Atlas inferred'}
+                    <Pill tone={f.source === 'verified-sbom' ? 'emerald' : f.source === 'govulncheck' ? 'cyan' : 'slate'} title={f.source === 'verified-sbom' ? 'Declared in an SBOM submitted to PG Atlas' : f.source === 'govulncheck' ? 'Detected by govulncheck from the repo’s resolved modules — not present in PG Atlas edges' : 'Inferred from PG Atlas registry crawl'}>
+                      {f.source === 'verified-sbom' ? 'PG Atlas SBOM' : f.source === 'govulncheck' ? 'govulncheck' : 'PG Atlas inferred'}
                     </Pill>
                   </td>
                   <td className="td">
-                    <ConfidencePill confidence={f.confidence} />
+                    <div className="flex flex-col items-start gap-1">
+                      <ConfidencePill confidence={f.confidence} />
+                      <ReachabilityPill reachability={f.reachability} trace={f.reachability_trace} />
+                    </div>
                   </td>
                   <td className="td font-mono text-xs">{f.fixed_versions[0] ? <span className="text-emerald-300">{f.fixed_versions[0]}</span> : <span className="text-amber-300">none</span>}</td>
                   <td className="td">
@@ -171,8 +251,9 @@ export function FindingsTable({ findings, showProject = false, expandable = true
               </Fragment>
             )
           })}
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }

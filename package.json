@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "data:refresh": "node scripts/build-snapshot.ts"
+    "data:refresh": "node scripts/build-snapshot.ts",
+    "data:reachability": "node scripts/annotate-reachability.ts",
+    "data:review": "node scripts/apply-review.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.0",

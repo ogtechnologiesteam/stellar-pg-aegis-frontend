@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, Copy, Flame, Inbox } from 'lucide-react'
-import type { ActivityStatus, Confidence, Severity, SeverityCounts } from '../api/types'
+import type { ActivityStatus, Confidence, Reachability, Severity, SeverityCounts } from '../api/types'
 import { SEVERITIES, SEVERITY_COLOR, STATUS_LABEL } from '../lib/format'
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
@@ -99,6 +99,22 @@ export function ConfidencePill({ confidence }: { confidence: Confidence }) {
   )
 }
 
+const REACH: Record<Reachability, { tone: 'rose' | 'slate' | 'emerald'; label: string; help: string }> = {
+  called: { tone: 'rose', label: 'calls vulnerable code', help: 'govulncheck found a call path from this repo into a vulnerable symbol' },
+  'not-called': { tone: 'slate', label: 'no call path', help: 'govulncheck: the module matches the advisory, but this repo’s code does not call the vulnerable symbols' },
+  unflagged: { tone: 'emerald', label: 'not flagged', help: 'govulncheck analyzed this repo at HEAD and did not flag this advisory — the resolved module may differ from the PG Atlas edge or already be patched' },
+}
+
+export function ReachabilityPill({ reachability, trace }: { reachability?: Reachability | null; trace?: string | null }) {
+  if (!reachability) return null
+  const r = REACH[reachability]
+  return (
+    <Pill tone={r.tone} title={trace ? `${r.help}\n${trace}` : r.help}>
+      {r.label}
+    </Pill>
+  )
+}
+
 export function PriorityMeter({ value }: { value: number }) {
   const color = value >= 70 ? 'from-rose-500 to-orange-400' : value >= 45 ? 'from-orange-400 to-yellow-300' : 'from-sky-500 to-cyan-300'
   return (
@@ -182,13 +198,13 @@ export function ErrorState({ error }: { error: unknown }) {
 
 export function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
   return (
-    <div className="inline-flex rounded-xl border border-white/[0.08] bg-ink-850 p-0.5">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-white/[0.08] bg-ink-850 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={clsx('cursor-pointer rounded-[10px] px-3 py-1.5 text-xs font-medium transition', value === o.value ? 'bg-white/[0.08] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200')}
+          className={clsx('shrink-0 cursor-pointer rounded-[10px] px-3 py-1.5 text-xs font-medium whitespace-nowrap transition', value === o.value ? 'bg-white/[0.08] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200')}
         >
           {o.label}
         </button>

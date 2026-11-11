@@ -135,6 +135,17 @@ export const GLOSSARY: GlossaryTerm[] = [
     related: ['cvss', 'criticality', 'kev', 'epss'],
   },
   {
+    slug: 'reachability',
+    term: 'Reachability',
+    short: 'Whether a repo’s code actually calls the vulnerable symbol — the strongest automated evidence that a finding is exploitable in practice.',
+    details: [
+      'For repos with Go findings, Aegis runs govulncheck call analysis at snapshot time: it shallow-clones the repo at HEAD, resolves its real module versions and checks call paths into the symbols each Go advisory names.',
+      'Findings are labeled called (a call path into a vulnerable symbol exists), not-called (the module matches but the symbols are never invoked) or unflagged (govulncheck did not report the advisory at HEAD — the resolved module may differ from the PG Atlas edge, or already be patched). Repos that cannot be cloned or analyzed stay unlabeled — reachability is evidence, never fabricated.',
+      'Reachability answers a narrower question than confidence: confidence says how sure we are the dependency exists, reachability says whether the vulnerable code is exercised. A verified-SBOM finding can still be unreachable; an inferred one can still be called.',
+    ],
+    related: ['verified-vs-inferred-edge', 'osv', 'blast-radius'],
+  },
+  {
     slug: 'purl',
     term: 'PURL',
     short: 'Package URL — a canonical package identifier (pkg:ecosystem/name@version).',

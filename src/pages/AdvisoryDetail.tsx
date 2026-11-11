@@ -93,7 +93,36 @@ export default function AdvisoryDetail() {
 
       <Card className="mt-4">
         <CardHeader title="Exposed public goods" subtitle="Ordered by depth, then PG Atlas criticality" />
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-white/[0.04] md:hidden">
+          {exposures.map((e) => (
+            <li key={e.repo_id} className="px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-slate-100">{e.repo_name}</div>
+                  <div className="truncate font-mono text-[11px] text-slate-500">{e.repo_id}</div>
+                </div>
+                <Pill tone={e.depth === 1 ? 'rose' : 'slate'}>{e.depth === 1 ? 'Affected' : `Depth ${e.depth}`}</Pill>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-400">
+                {e.project_id ? (
+                  <Link to={`/projects/${encodeURIComponent(e.project_id)}`} className="font-medium text-slate-200 hover:text-white">
+                    {e.project_name}
+                  </Link>
+                ) : (
+                  <Pill>Not a public good</Pill>
+                )}
+                {e.via && <span className="font-mono">via {e.via}</span>}
+                <span className="font-mono tabular-nums">{e.criticality_score ?? '—'} dependents</span>
+                {e.project_id && (
+                  <Link to={`/disclose?q=${encodeURIComponent(e.project_id)}`} className="ml-auto text-indigo-300 hover:text-indigo-200">
+                    Disclosure channel →
+                  </Link>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px]">
             <thead className="border-b border-white/[0.05]">
               <tr>
