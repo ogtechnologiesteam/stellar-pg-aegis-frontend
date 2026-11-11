@@ -155,7 +155,13 @@ export default function Overview() {
                     <div className="truncate text-sm font-medium text-slate-100">{p.display_name}</div>
                     <div className="text-xs text-slate-500">{p.category ?? 'Uncategorized'}</div>
                   </div>
-                  {p.hygiene.pvr_enabled ? <Pill tone="cyan">PVR only</Pill> : <Pill tone="amber">No channel</Pill>}
+                  {p.hygiene.pvr_enabled ? (
+                    <Pill tone="cyan">PVR only</Pill>
+                  ) : p.hygiene.pvr_enabled === false ? (
+                    <Pill tone="amber">No channel</Pill>
+                  ) : (
+                    <Pill tone="slate" title="GitHub enrichment hasn't checked this project's repos for PVR yet">Not checked</Pill>
+                  )}
                   <span className="font-mono text-xs text-slate-400 tabular-nums" title="PG Atlas criticality — in-ecosystem dependents">
                     {p.criticality_score ?? '—'} dependents
                   </span>
