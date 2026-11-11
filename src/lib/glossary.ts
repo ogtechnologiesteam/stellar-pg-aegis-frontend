@@ -8,6 +8,16 @@ export interface GlossaryTerm {
 
 export const GLOSSARY: GlossaryTerm[] = [
   {
+    slug: 'advisory-kind',
+    term: 'Advisory kind',
+    short: 'Whether an advisory is a real vulnerability or ecosystem metadata — unmaintained, unsound, notice, yanked or malware.',
+    details: [
+      'Most advisories are vulnerability reports: a CVE, GHSA or ecosystem entry describing exploitable code. RustSec additionally publishes non-vulnerability categories — unmaintained (the crate is abandoned), unsound (memory-unsafe or uncallable under some conditions), notice (informational) and yanked (the version was pulled from the registry). The OSV malicious-packages feed adds malware advisories (MAL-*).',
+      'Aegis reads the category off the OSV record and badges non-vulnerability advisories so hygiene noise is distinguishable from real CVEs — a project with twenty unmaintained-crate notices does not have twenty vulnerabilities.',
+    ],
+    related: ['osv', 'cve-ghsa'],
+  },
+  {
     slug: 'activity-status',
     term: 'Activity status',
     short: 'PG Atlas classification of a project’s maintenance state: live, in-dev, discontinued or non-responsive.',
@@ -97,6 +107,16 @@ export const GLOSSARY: GlossaryTerm[] = [
     related: ['epss', 'cvss', 'priority-score'],
   },
   {
+    slug: 'manifest-probe',
+    term: 'Lockfile probe',
+    short: 'Manual review reads a repo’s committed lockfile at HEAD and matches it against OSV — recovering findings PG Atlas never ingested.',
+    details: [
+      'PG Atlas only sees dependency edges it crawled or received via SBOM; committed lockfiles it missed are invisible to the graph. A lockfile probe clones the repo, reads the pinned versions directly (Cargo.lock, package-lock.json, pnpm-lock.yaml, bun.lock, uv.lock, composer.lock, requirements.txt) and queries OSV for each.',
+      'Findings recovered this way are emitted with confirmed confidence and a “verified present in lockfile at HEAD” note. The same review pass can annotate reachability manually — its verdicts are prefixed “manual:” with a one-line justification.',
+    ],
+    related: ['sbom', 'osv', 'verified-vs-inferred-edge', 'reachability'],
+  },
+  {
     slug: 'openssf-scorecard',
     term: 'OpenSSF Scorecard',
     short: 'Automated security-health checks for repos — branch protection, update tools, signed releases and more.',
@@ -142,6 +162,7 @@ export const GLOSSARY: GlossaryTerm[] = [
       'For repos with Go findings, Aegis runs govulncheck call analysis at snapshot time: it shallow-clones the repo at HEAD, resolves its real module versions and checks call paths into the symbols each Go advisory names.',
       'Findings are labeled called (a call path into a vulnerable symbol exists), not-called (the module matches but the symbols are never invoked) or unflagged (govulncheck did not report the advisory at HEAD — the resolved module may differ from the PG Atlas edge, or already be patched). Repos that cannot be cloned or analyzed stay unlabeled — reachability is evidence, never fabricated.',
       'Reachability answers a narrower question than confidence: confidence says how sure we are the dependency exists, reachability says whether the vulnerable code is exercised. A verified-SBOM finding can still be unreachable; an inferred one can still be called.',
+      'Verdicts can also come from manual review — inspecting cloned source and lockfiles — which applies the same called / not-called / unflagged labels to non-Go findings govulncheck cannot analyze. Manual verdicts carry a “manual:” justification in the trace.',
     ],
     related: ['verified-vs-inferred-edge', 'osv', 'blast-radius'],
   },

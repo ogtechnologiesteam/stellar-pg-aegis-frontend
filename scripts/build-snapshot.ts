@@ -39,7 +39,7 @@ import type {
   Vuln,
 } from '../src/api/types.ts'
 import { computePriority, logNorm } from '../src/lib/priority.ts'
-import { affectedFor, fetchOsv, LABEL, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
+import { affectedFor, fetchOsv, kindOf, LABEL, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
 import { CACHE_DIR, cacheGet, cachePath, cacheSet, log } from './cache.ts'
 import { CLONES_DIR, ghKey, ghRepoOf, govcBinary, govcRepo, GOVC_MAX, GOVC_REPOS, type ReachVerdicts } from './govulncheck.ts'
 
@@ -516,6 +516,7 @@ async function main() {
           package: { purl: `${e.canonical_id}@${v.version}`, name: p.name, ecosystem: p.ecosystem, version: v.version, version_range: e.version_range ?? '', resolution: v.resolution },
           severity,
           cvss,
+          kind: kindOf(o),
           kev: ids.some((c) => kev.has(c)),
           epss: ids.map((c) => epss.get(c)).find((x) => x !== undefined) ?? null,
           confidence,
@@ -701,6 +702,7 @@ async function main() {
           package: { purl: `pkg:golang/${g.m}@${g.v2}`, name: g.m!, ecosystem: 'Go', version: g.v2!, version_range: g.v2!, resolution: 'exact' },
           severity,
           cvss,
+          kind: kindOf(o),
           kev: ids.some((c) => kev.has(c)),
           epss: ids.map((c) => epss.get(c)).find((x) => x !== undefined) ?? null,
           confidence: 'confirmed',
@@ -923,6 +925,7 @@ async function main() {
         severity,
         cvss,
         cvss_vector: vector,
+        kind: kindOf(o),
         published: o.published ?? null,
         modified: o.modified ?? null,
         kev: f.kev,

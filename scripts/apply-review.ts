@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import type { Finding, Reachability, SeverityCounts, Snapshot } from '../src/api/types.ts'
 import { computePriority, logNorm } from '../src/lib/priority.ts'
 import { log } from './cache.ts'
-import { affectedFor, fetchOsv, severityOf, UPGRADE_HINT } from './osv.ts'
+import { affectedFor, fetchOsv, kindOf, severityOf, UPGRADE_HINT } from './osv.ts'
 
 const DIR = dirname(fileURLToPath(import.meta.url))
 const OUT = resolve(DIR, '../public/data/snapshot.json')
@@ -181,6 +181,7 @@ async function emitManifestFindings(snap: Snapshot): Promise<number> {
             package: { purl: `pkg:${({ npm: 'npm', Packagist: 'composer', 'crates.io': 'cargo', PyPI: 'pypi' }) as Record<string, string>}[d.eco] ?? d.eco.toLowerCase()}/${d.name}@${d.version}`, name: d.name, ecosystem: d.eco, version: d.version, version_range: d.version, resolution: 'exact' },
             severity,
             cvss,
+            kind: kindOf(o),
             kev: false,
             epss: null,
             confidence: 'confirmed',
@@ -198,7 +199,7 @@ async function emitManifestFindings(snap: Snapshot): Promise<number> {
           emitted++
           if (!vulnById.has(o.id)) {
             const v = {
-              id: o.id, aliases: o.aliases ?? [], summary: o.summary || o.details?.split('\n')[0]?.slice(0, 160) || o.id, details: (o.details ?? '').slice(0, 1500), severity, cvss, cvss_vector: null,
+              id: o.id, aliases: o.aliases ?? [], summary: o.summary || o.details?.split('\n')[0]?.slice(0, 160) || o.id, details: (o.details ?? '').slice(0, 1500), severity, cvss, cvss_vector: null, kind: kindOf(o),
               published: o.published ?? null, modified: o.modified ?? null, kev: false, epss: null, ecosystem: d.eco, package: d.name, affected_range: range,
               fixed_versions: fixed, references: [{ type: 'ADVISORY', url: `https://osv.dev/vulnerability/${o.id}` }, ...(o.references ?? []).slice(0, 8)],
               exposed_projects: 1, exposed_repos: 1,
@@ -212,6 +213,22 @@ async function emitManifestFindings(snap: Snapshot): Promise<number> {
     }
     log(`manifest probe: ${probe.repo} — ${pkgs.length} locked packages scanned`)
   }
+
+  // Backfill advisory kinds for vulns emitted before kind tracking — RustSec
+  // is the only source with non-vuln categories in our data, so only RUSTSEC
+  // ids need a lookup (disk-cached); everything else is a real vuln.
+  const missing = snap.vulns.filter((v) => !v.kind)
+  for (let i = 0; i < missing.length; i += 20) {
+    await Promise.all(
+      missing.slice(i, i + 20).map(async (v) => {
+        if (v.id.startsWith('MAL-')) v.kind = 'malware'
+        else if (v.id.startsWith('RUSTSEC-')) v.kind = kindOf((await fetchOsv(v.id)) ?? { id: v.id })
+        else v.kind = 'vulnerability'
+      }),
+    )
+  }
+  if (missing.length) log(`advisory kinds classified for ${missing.length} vulns`)
+  for (const p of snap.projects) for (const f of p.findings) if (!f.kind) f.kind = vulnById.get(f.vuln_id)?.kind ?? 'vulnerability'
   return emitted
 }
 

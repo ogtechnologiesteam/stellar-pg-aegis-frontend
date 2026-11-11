@@ -132,6 +132,7 @@ export function FindingsTable({ findings, showProject = false, expandable = true
                     <div className="flex flex-wrap items-center gap-1.5">
                       <SeverityBadge severity={f.severity} cvss={f.cvss} />
                       {f.kev && <KevBadge />}
+                      {f.kind && f.kind !== 'vulnerability' && <Pill tone={f.kind === 'malware' ? 'rose' : 'amber'}>{f.kind}</Pill>}
                     </div>
                     <div className="mt-1.5 text-sm text-slate-200">{f.summary}</div>
                   </div>
@@ -223,6 +224,7 @@ export function FindingsTable({ findings, showProject = false, expandable = true
                     <div className="flex items-center gap-1.5">
                       <SeverityBadge severity={f.severity} cvss={f.cvss} />
                       {f.kev && <KevBadge />}
+                      {f.kind && f.kind !== 'vulnerability' && <Pill tone={f.kind === 'malware' ? 'rose' : 'amber'}>{f.kind}</Pill>}
                     </div>
                   </td>
                   <td className="td">

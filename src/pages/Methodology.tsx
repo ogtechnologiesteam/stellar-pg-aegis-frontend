@@ -18,7 +18,8 @@ const SOURCES = [
   ['security.txt', 'RFC 9116 file fetched at /.well-known/security.txt on each project website (non-GitHub). Presence is verified by a Contact: field; adds a ranked disclosure channel and a hygiene check.'],
   ['OpenSSF Scorecard', 'Overall repo score where Scorecard has scanned the repository.'],
   ['CISA KEV · FIRST EPSS', 'Exploitation signals used for prioritization.'],
-  ['govulncheck', 'Go call analysis — clones repos with Go findings at HEAD and checks whether their code calls the symbols each advisory names (reachability: called / not-called / unflagged).'],
+  ['govulncheck', 'Go call analysis — clones repos with Go findings at HEAD and checks whether their code calls the symbols each advisory names (reachability: called / not-called / unflagged). Also emits advisories it reports that edge matching missed.'],
+  ['Lockfile probes', 'Manual review reads a repo’s committed lockfile at HEAD (Cargo.lock, package-lock.json, pnpm-lock.yaml, bun.lock, uv.lock, composer.lock, requirements.txt) and matches it against OSV — recovering findings PG Atlas never ingested and clearing stale edges. Verdicts prefixed “manual:” carry a one-line justification.'],
 ]
 
 const DISCLOSURE_RANKING = [
@@ -30,9 +31,18 @@ const DISCLOSURE_RANKING = [
 ]
 
 const CONFIDENCE = [
-  ['confirmed', 'Exact package version from a verified SBOM submitted to PG Atlas.'],
+  ['confirmed', 'Exact package version from a verified SBOM submitted to PG Atlas, or a version pinned in a repo lockfile verified by a manifest probe.'],
   ['possible', 'Only a version range is declared; shown for the lowest matching version (worst case).'],
   ['inferred', 'Dependency edge came from PG Atlas registry crawling, not a submitted SBOM.'],
+] as const
+
+const KINDS = [
+  ['vulnerability', 'A real advisory — CVE/GHSA/RUSTSEC vulnerability entries. Everything else is ecosystem metadata.'],
+  ['unmaintained', 'RustSec flag: the crate is no longer maintained. Not a CVE, but a supply-chain risk.'],
+  ['unsound', 'RustSec flag: the crate is memory-unsafe or uncallable under some conditions; no CVE assigned.'],
+  ['notice', 'Informational RustSec entry that is neither a vulnerability nor a maintenance flag.'],
+  ['yanked', 'The affected version was pulled from the package registry.'],
+  ['malware', 'Package flagged as malicious by the OSV malicious-packages database (MAL-* advisories).'],
 ] as const
 
 export default function Methodology() {
@@ -70,6 +80,18 @@ export default function Methodology() {
               {CONFIDENCE.map(([c, d]) => (
                 <li key={c} className="flex items-start gap-3">
                   <ConfidencePill confidence={c} /> {d}
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card>
+            <CardHeader title="Advisory kinds" subtitle="RustSec categories + OSV malware — badge on each finding" />
+            <ul className="space-y-2.5 p-5 text-sm text-slate-300">
+              {KINDS.map(([k, d]) => (
+                <li key={k} className="flex items-start gap-3">
+                  <span className="w-28 shrink-0 font-mono text-xs text-amber-300">{k}</span>
+                  <span className="text-xs text-slate-400">{d}</span>
                 </li>
               ))}
             </ul>

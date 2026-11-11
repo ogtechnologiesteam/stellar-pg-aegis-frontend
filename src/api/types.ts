@@ -15,6 +15,8 @@ export type Reachability = 'called' | 'not-called' | 'unflagged'
 export type FindingStatus = 'open' | 'fixed' | 'withdrawn' | 'ignored'
 export type Resolution = 'exact' | 'range'
 export type EdgeSource = 'verified-sbom' | 'inferred-shadow' | 'govulncheck'
+/** RustSec advisory categories + MAL-* malware; 'vulnerability' is the default CVE-class advisory. */
+export type AdvisoryKind = 'vulnerability' | 'unmaintained' | 'unsound' | 'notice' | 'yanked' | 'malware'
 export type ChannelKind = 'pvr' | 'email' | 'url' | 'bounty' | 'security_txt' | 'policy' | 'other'
 export type ExtractedBy = 'rule' | 'llm' | 'manual'
 
@@ -114,6 +116,8 @@ export interface Finding {
   epss: number | null
   confidence: Confidence
   source: EdgeSource
+  /** Advisory class — 'vulnerability' unless RustSec marks it unmaintained/unsound/notice/yanked or it's MAL-* malware. */
+  kind?: AdvisoryKind
   /** null = not analyzed (non-Go, non-GitHub, or govulncheck unavailable/failed). */
   reachability: Reachability | null
   /** For 'called': "pkg.VulnFunc ← entrypkg.caller" from the govulncheck trace. */
@@ -158,6 +162,7 @@ export interface Vuln {
   severity: Severity
   cvss: number | null
   cvss_vector: string | null
+  kind?: AdvisoryKind
   published: string | null
   modified: string | null
   kev: boolean
@@ -231,6 +236,8 @@ export interface ProjectQuery {
   fixable?: boolean
   /** Has ≥1 finding where govulncheck found a call path into a vulnerable symbol. */
   reachable?: boolean
+  /** Has ≥1 finding whose advisory is of this kind (e.g. 'unmaintained', 'vulnerability'). */
+  kind?: AdvisoryKind
   wg_listed?: boolean
   sort?: 'priority' | 'criticality' | 'name' | 'findings'
   limit?: number

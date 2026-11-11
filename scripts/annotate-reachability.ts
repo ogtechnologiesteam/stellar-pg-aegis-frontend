@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import type { Finding, Reachability, SeverityCounts, Snapshot } from '../src/api/types.ts'
 import { computePriority, logNorm } from '../src/lib/priority.ts'
 import { CACHE_DIR, log } from './cache.ts'
-import { affectedFor, fetchOsv, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
+import { affectedFor, fetchOsv, kindOf, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
 import { ghKey, ghRepoOf, govcBinary, govcRepo, GOVC_MAX, GOVC_REPOS, type ReachVerdicts } from './govulncheck.ts'
 
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '../public/data/snapshot.json')
@@ -114,6 +114,7 @@ async function main() {
         package: { purl: `pkg:golang/${g.m}@${g.v2}`, name: g.m!, ecosystem: 'Go', version: g.v2!, version_range: g.v2!, resolution: 'exact' },
         severity,
         cvss,
+        kind: kindOf(o),
         kev: ids.some((c) => kev.has(c)),
         epss: null,
         confidence: 'confirmed',
@@ -131,7 +132,7 @@ async function main() {
       emitted++
       if (!vulnById.has(vid)) {
         const v = {
-          id: o.id, aliases: o.aliases ?? [], summary: f.summary, details: (o.details ?? '').slice(0, 1500), severity, cvss, cvss_vector: null,
+          id: o.id, aliases: o.aliases ?? [], summary: f.summary, details: (o.details ?? '').slice(0, 1500), severity, cvss, cvss_vector: null, kind: kindOf(o),
           published: o.published ?? null, modified: o.modified ?? null, kev: f.kev, epss: null, ecosystem: 'Go' as const, package: g.m!, affected_range: range,
           fixed_versions: fixed, references: [{ type: 'ADVISORY', url: `https://osv.dev/vulnerability/${o.id}` }, ...(o.references ?? []).slice(0, 8)],
           exposed_projects: 1, exposed_repos: 1,

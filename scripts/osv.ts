@@ -1,6 +1,9 @@
 // Shared OSV advisory helpers — CVSS v3 scoring, severity labels, affected-range
 // extraction and upgrade hints. Used by build-snapshot.ts and annotate-reachability.ts.
-import type { Severity } from '../src/api/types.ts'
+import type { AdvisoryKind, Severity } from '../src/api/types.ts'
+import { cacheGet, cacheSet } from './cache.ts'
+
+const OSV_TTL_MS = 30 * 24 * 3600_000
 
 export const UPGRADE_HINT: Record<string, (p: string, v: string) => string> = {
   npm: (p, v) => `npm install ${p}@${v}`,
@@ -57,7 +60,7 @@ export interface OsvVuln {
   withdrawn?: string
   severity?: { type: string; score: string }[]
   database_specific?: { severity?: string }
-  affected?: { package?: { name: string; ecosystem: string }; ranges?: { type: string; events: OsvEvent[] }[]; versions?: string[]; database_specific?: { severity?: string }; ecosystem_specific?: { severity?: string } }[]
+  affected?: { package?: { name: string; ecosystem: string }; ranges?: { type: string; events: OsvEvent[] }[]; versions?: string[]; database_specific?: { severity?: string; categories?: string[]; informational?: string }; ecosystem_specific?: { severity?: string } }[]
   references?: { type: string; url: string }[]
 }
 
@@ -93,13 +96,32 @@ export function severityOf(v: OsvVuln): { severity: Severity; cvss: number | nul
   return { severity, cvss: score, vector }
 }
 
-// Fetches one OSV record by id (null on 404/network failure).
+// Advisory class from ecosystem metadata — RustSec records carry categories /
+// informational markers in affected[].database_specific (e.g. paste = unmaintained).
+// MAL-* ids come from the malicious-packages DB. Everything else is a real vuln.
+const KINDS = new Set<AdvisoryKind>(['vulnerability', 'unmaintained', 'unsound', 'notice', 'yanked', 'malware'])
+export function kindOf(v: OsvVuln): AdvisoryKind {
+  if (v.id.startsWith('MAL-')) return 'malware'
+  let fallback: AdvisoryKind = 'vulnerability'
+  for (const a of v.affected ?? []) {
+    for (const c of a.database_specific?.categories ?? []) if (KINDS.has(c as AdvisoryKind) && c !== 'vulnerability') return c as AdvisoryKind
+    const i = a.database_specific?.informational
+    if (i && KINDS.has(i as AdvisoryKind) && i !== 'vulnerability') fallback = i as AdvisoryKind
+  }
+  return fallback
+}
+
+// Fetches one OSV record by id (null on 404/network failure). Disk-cached 30d.
 export async function fetchOsv(id: string): Promise<OsvVuln | null> {
+  const hit = await cacheGet<OsvVuln | null>(`osv:${id}`, OSV_TTL_MS)
+  if (hit !== undefined) return hit
+  let out: OsvVuln | null = null
   try {
     const res = await fetch(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(30_000) })
-    if (!res.ok) return null
-    return (await res.json()) as OsvVuln
+    if (res.ok) out = (await res.json()) as OsvVuln
   } catch {
-    return null
+    /* network failure */
   }
+  await cacheSet(`osv:${id}`, out)
+  return out
 }
