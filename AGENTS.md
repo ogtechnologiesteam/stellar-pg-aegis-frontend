@@ -46,6 +46,27 @@ Verification before finishing a change: `npm run lint && npm run build`.
   `PG_ATLAS_API` mirrors reuse them.
 - `scripts/annotate-reachability.ts` — `npm run data:reachability`: runs the same govulncheck
   pass against the existing `public/data/snapshot.json` without a full refresh.
+- `scripts/diff-snapshot.ts` — `npm run data:diff <old.json> <new.json>`: markdown report of
+  new/resolved findings, KEV adds and reachability flips; appends `new_findings=` etc. to
+  `$GITHUB_OUTPUT`. Used by the snapshot-refresh workflow.
+- Stellar Security Portal (`SECURITY_PORTAL_API`, default `https://stellarsecurityportal.com/api/v1`):
+  `GET /protocols` + `POST /reports {}`; only `approved` reports are used. Protocol→project
+  mapping is curated (`PORTAL_MAP` in `build-snapshot.ts`, same shape as `WG_MAP`) plus a
+  `protocol.url` repo/website-host match; unmatched protocols are logged. Per-report page:
+  `/report/{id}`. Empty `audits`/`audit_reports_count` = checked, none found; `null` = portal
+  unreachable.
+
+### GitHub Actions
+
+- `.github/workflows/snapshot-refresh.yml` — nightly + dispatch: `data:refresh` + `data:review`,
+  diffs against the previous snapshot into the job summary, commits `snapshot.json` back.
+  `GH_MAX_REPOS=800` bounds GitHub enrichment; set `AEGIS_GH_TOKEN` (PAT) if the default
+  `GITHUB_TOKEN` rate-limits or branch protection blocks the push (falls back to an artifact).
+- `.github/workflows/aegis-scan.yml` — `workflow_call` reusable scan for any repo: wraps
+  `google/osv-scanner-action` (PR-diff variant on PRs, full scan otherwise) + govulncheck per
+  `go.mod`, merged SARIF upload to code scanning.
+- `.github/workflows/vuln-scan.yml` — dogfoods `aegis-scan.yml` on this repo (PRs + weekly).
+  Advisory ignores live in `osv-scanner.toml` at repo root.
 - React Query hooks (`useProjects`, `useVulnExposure`, ...) live in `src/api/index.ts`.
 - Priority weights (spec FR5) live in `src/lib/priority.ts`; severity falls back to the
   advisory label when no CVSS v3 score is computable (`unknown` severity is possible).

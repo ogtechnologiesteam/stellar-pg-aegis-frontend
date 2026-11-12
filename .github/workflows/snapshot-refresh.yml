@@ -1,0 +1,104 @@
+name: Snapshot refresh
+
+# Nightly rebuild of public/data/snapshot.json — runs the same pipeline as
+# `npm run data:refresh` locally, diffs the result against the previous snapshot
+# (new findings land in the job summary + a warning annotation), and commits the
+# updated snapshot back to main.
+
+on:
+  schedule:
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshot-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore source caches
+        # Only the JSON response cache (PG Atlas, GitHub, Scorecard, portal, govulncheck
+        # verdicts) — the multi-GB clone trees are re-shallow-cloned when needed.
+        uses: actions/cache@v4
+        with:
+          path: scripts/.cache/*.json
+          key: aegis-src-${{ github.run_id }}
+          restore-keys: aegis-src-
+
+      - name: Keep previous snapshot
+        run: |
+          if [ -f public/data/snapshot.json ]; then
+            cp public/data/snapshot.json /tmp/snapshot-old.json
+          else
+            echo '{"summary":{"generated_at":"1970-01-01T00:00:00Z"},"projects":[],"vulns":[],"exposures":{}}' > /tmp/snapshot-old.json
+          fi
+
+      - name: Rebuild snapshot
+        env:
+          # AEGIS_GH_TOKEN (a PAT) raises the GitHub rate limit vs the built-in
+          # GITHUB_TOKEN; falls back to GITHUB_TOKEN when unset.
+          GITHUB_TOKEN: ${{ secrets.AEGIS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          # Caps GitHub enrichment per run to stay under the token's hourly limit;
+          # cached results resume on the next run.
+          GH_MAX_REPOS: '800'
+        run: npm run data:refresh && npm run data:review
+
+      - name: Diff findings
+        id: diff
+        run: node scripts/diff-snapshot.ts /tmp/snapshot-old.json public/data/snapshot.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Flag new findings
+        if: steps.diff.outputs.new_findings != '0' && steps.diff.outputs.new_findings != ''
+        run: echo "::warning title=New vulnerability findings::${{ steps.diff.outputs.new_findings }} new findings (${{ steps.diff.outputs.kev_new }} known-exploited) in the refreshed snapshot"
+
+      - name: Commit snapshot
+        run: |
+          if git diff --quiet -- public/data/snapshot.json; then
+            echo "Snapshot unchanged — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/snapshot.json
+          git commit -m "Refresh data snapshot" \
+                   -m "new findings: ${{ steps.diff.outputs.new_findings }} · resolved: ${{ steps.diff.outputs.resolved_findings }} · kev: ${{ steps.diff.outputs.kev_new }}"
+
+      - name: Push snapshot
+        id: push
+        continue-on-error: true
+        run: git push
+
+      - name: Upload snapshot artifact on push failure
+        if: steps.push.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-json
+          path: public/data/snapshot.json
+          retention-days: 14
+
+      - name: Warn on push failure
+        if: steps.push.outcome == 'failure'
+        run: echo "::warning title=Snapshot commit blocked::git push was rejected (branch protection on main?). Grant Actions write access or set AEGIS_GH_TOKEN — snapshot.json is attached as a build artifact instead."

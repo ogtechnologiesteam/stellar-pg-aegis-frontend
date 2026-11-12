@@ -22,7 +22,7 @@ const matches = (haystack: string, needle?: string) => !needle || haystack.toLow
 export const snapshotClient: AegisApi = {
   mode: 'snapshot',
   getSummary: async () => (await loadSnapshot()).summary,
-  listProjects: async ({ search, activity_status, has_policy, kev, fixable, reachable, kind, wg_listed, sort = 'priority', limit, offset } = {}) => {
+  listProjects: async ({ search, activity_status, has_policy, kev, fixable, reachable, kind, wg_listed, audited, sort = 'priority', limit, offset } = {}) => {
     const { projects } = await loadSnapshot()
     const items = projects
       .filter((p) => !kev || p.findings.some((f) => f.kev))
@@ -30,6 +30,7 @@ export const snapshotClient: AegisApi = {
       .filter((p) => !reachable || p.findings.some((f) => f.reachability === 'called'))
       .filter((p) => !kind || p.findings.some((f) => (f.kind ?? 'vulnerability') === kind))
       .filter((p) => wg_listed === undefined || p.wg_listed === wg_listed)
+      .filter((p) => audited === undefined || (p.audits?.length ?? 0) > 0 === audited)
       .map(toSummary)
       .filter((p) => matches(`${p.display_name} ${p.canonical_id} ${p.category ?? ''}`, search))
       .filter((p) => !activity_status || p.activity_status === activity_status)

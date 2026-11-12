@@ -1,0 +1,4 @@
+# osv-scanner ignore list. See AGENTS.md "Known audit note".
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+reason = "minimatch ReDoS via typescript-eslint — lint tooling only, never shipped; no fix released upstream yet"

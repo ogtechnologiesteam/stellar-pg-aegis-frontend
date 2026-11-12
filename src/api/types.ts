@@ -47,6 +47,9 @@ export interface Hygiene {
   published_advisories_count: number | null
   last_advisory_at: string | null
   scorecard_overall: number | null
+  /** Approved audit reports on the Stellar Security Portal. null = portal not checked. */
+  audit_reports_count: number | null
+  last_audit_at: string | null
 }
 
 export interface ProjectSummary {
@@ -140,6 +143,15 @@ export interface PublishedAdvisory {
   url: string
 }
 
+/** A security audit report indexed by the Stellar Security Portal (stellarsecurityportal.com). */
+export interface AuditReport {
+  id: number
+  name: string
+  auditor: string | null
+  date: string
+  url: string
+}
+
 export interface ProjectDetail extends ProjectSummary {
   description: string | null
   website: string | null
@@ -147,6 +159,8 @@ export interface ProjectDetail extends ProjectSummary {
   findings: Finding[]
   disclosure: DisclosureChannel[]
   published_advisories: PublishedAdvisory[]
+  /** Approved audit reports, newest first. Empty when the portal lists none or was not checked. */
+  audits: AuditReport[]
 }
 
 export interface Reference {
@@ -220,6 +234,8 @@ export interface EcosystemSummary {
   /** govulncheck verdict counts across Go findings. null = call analysis never ran. */
   reachability: Record<Reachability, number> | null
   median_fixable_advisory_age_days: number | null
+  /** Share of WG-listed public goods with ≥1 approved Security Portal audit report. null = portal not checked. */
+  audit_coverage: number | null
   dependencies_total: number
   dependencies_resolved: number
   by_ecosystem: EcosystemCount[]
@@ -238,6 +254,8 @@ export interface ProjectQuery {
   reachable?: boolean
   /** Has ≥1 finding whose advisory is of this kind (e.g. 'unmaintained', 'vulnerability'). */
   kind?: AdvisoryKind
+  /** Has ≥1 approved audit report on the Stellar Security Portal. */
+  audited?: boolean
   wg_listed?: boolean
   sort?: 'priority' | 'criticality' | 'name' | 'findings'
   limit?: number

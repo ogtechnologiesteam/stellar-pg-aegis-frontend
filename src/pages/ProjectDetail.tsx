@@ -1,5 +1,5 @@
 import { Link, useParams, useSearchParams } from 'react-router'
-import { Archive, ArrowLeft, ExternalLink, FileWarning, GitFork, Github, Globe, Siren, Star, Users, X } from 'lucide-react'
+import { Archive, ArrowLeft, ExternalLink, FileWarning, GitFork, Github, Globe, ShieldCheck, Siren, Star, Users, X } from 'lucide-react'
 import { useProject } from '../api'
 import { ApiError } from '../api/client'
 import { DisclosureChannels } from '../components/DisclosureCard'
@@ -174,6 +174,26 @@ export default function ProjectDetail() {
               </ul>
             </Card>
           )}
+
+          {(p.audits?.length ?? 0) > 0 && (
+            <Card>
+              <CardHeader title="Audit reports" subtitle="Indexed by the Stellar Security Portal" />
+              <ul className="divide-y divide-white/[0.04]">
+                {p.audits.slice(0, 10).map((a) => (
+                  <li key={a.id}>
+                    <a href={a.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-5 py-3 transition hover:bg-white/[0.02]">
+                      <ShieldCheck className="size-4 shrink-0 text-emerald-300" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm text-slate-200">{a.name}</div>
+                        <div className="font-mono text-[11px] text-slate-500">{a.auditor ?? 'Auditor not listed'}</div>
+                      </div>
+                      <span className="text-xs text-slate-500">{relativeTime(a.date)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -200,6 +220,11 @@ export default function ProjectDetail() {
                   <dt className="text-slate-500">Published advisories</dt>
                   <dd className="mt-0.5 text-lg font-semibold text-white tabular-nums">{h.published_advisories_count ?? '—'}</dd>
                   {h.last_advisory_at && <dd className="text-slate-500">last {relativeTime(h.last_advisory_at)}</dd>}
+                </div>
+                <div>
+                  <dt className="text-slate-500">Audit reports</dt>
+                  <dd className="mt-0.5 text-lg font-semibold text-white tabular-nums">{h.audit_reports_count ?? '—'}</dd>
+                  {h.last_audit_at && <dd className="text-slate-500">last {relativeTime(h.last_audit_at)}</dd>}
                 </div>
               </dl>
               <p className="pt-2 text-[11px] text-slate-600">“unknown” means the repo has not been checked yet — not that the practice is absent.</p>

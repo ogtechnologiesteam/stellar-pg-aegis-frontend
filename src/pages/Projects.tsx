@@ -20,6 +20,7 @@ export default function Projects() {
   const kev = params.has('kev')
   const fixable = params.has('fixable')
   const reachable = params.has('reach')
+  const audited = params.has('audited')
 
   const set = (k: string, v: string, fallback = '') =>
     setParams(
@@ -38,6 +39,7 @@ export default function Projects() {
     kev: kev || undefined,
     fixable: fixable || undefined,
     reachable: reachable || undefined,
+    audited: audited || undefined,
     wg_listed: scope === 'pg' ? true : undefined,
     sort,
     limit: 200,
@@ -85,7 +87,7 @@ export default function Projects() {
         </select>
       </Card>
 
-      {(kev || fixable || reachable) && (
+      {(kev || fixable || reachable || audited) && (
         <div className="mb-4 -mt-1 flex items-center gap-2 text-xs text-slate-500">
           Showing
           {reachable && (
@@ -101,6 +103,11 @@ export default function Projects() {
           {fixable && (
             <button onClick={() => set('fixable', '')} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-300 ring-1 ring-emerald-500/25 ring-inset transition hover:bg-emerald-500/20">
               projects with fixable findings <X className="size-3" />
+            </button>
+          )}
+          {audited && (
+            <button onClick={() => set('audited', '')} className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-0.5 font-medium text-amber-300 ring-1 ring-amber-500/25 ring-inset transition hover:bg-amber-500/20">
+              projects with audit reports <X className="size-3" />
             </button>
           )}
         </div>

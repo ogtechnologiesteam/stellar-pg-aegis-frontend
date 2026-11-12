@@ -1,0 +1,21 @@
+name: Vulnerability scan
+
+# Dogfoods the reusable Aegis scan workflow on this repo: osv-scanner over the
+# committed lockfiles (PRs flag only newly introduced vulnerabilities) plus a
+# scheduled full scan. Ignored advisories live in osv-scanner.toml.
+
+on:
+  pull_request:
+  schedule:
+    - cron: '30 5 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  scan:
+    uses: ./.github/workflows/aegis-scan.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: write

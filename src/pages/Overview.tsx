@@ -33,6 +33,7 @@ export default function Overview() {
   const fixableProjects = useProjects({ fixable: true, limit: 1 })
   const pgProjects = useProjects({ wg_listed: true, limit: 1 })
   const reachableProjects = useProjects({ reachable: true, limit: 1 })
+  const auditedProjects = useProjects({ audited: true, limit: 1 })
 
   if (summary.error) return <ErrorState error={summary.error} />
   const s = summary.data
@@ -56,9 +57,9 @@ export default function Overview() {
         }
       />
 
-      <div className={`grid grid-cols-2 gap-4 ${s?.reachability ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-4 ${s?.reachability ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
         {!s ? (
-          Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)
+          Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)
         ) : (
           <>
             <Kpi icon={<ShieldAlert className="size-4" />} label="Open findings" value={totalFindings(s.open_findings)} hint={`${s.open_findings.critical} critical · ${s.open_findings.high} high · across ${s.affected_projects} projects`} accent="#f43f5e" to="/projects?sort=findings" />
@@ -68,6 +69,7 @@ export default function Overview() {
             {s.reachability && (
               <Kpi icon={<Crosshair className="size-4" />} label="Calls vulnerable code" value={s.reachability.called} hint={`call paths into vulnerable code confirmed — govulncheck + manual review · ${s.reachability['not-called'] + s.reachability.unflagged} cleared · across ${reachableProjects.data?.total ?? '…'} projects`} accent="#e879f9" to="/projects?reach=1" />
             )}
+            <Kpi icon={<ShieldCheck className="size-4" />} label="Audited projects" value={s.audit_coverage == null ? '—' : auditedProjects.data?.total ?? '…'} hint={s.audit_coverage == null ? 'Security Portal not checked in this snapshot' : `≥1 approved Security Portal report · ${Math.round(s.audit_coverage * 100)}% of WG public goods`} accent="#fbbf24" to="/projects?audited=1" />
           </>
         )}
       </div>
@@ -122,13 +124,14 @@ export default function Overview() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <Card>
-          <CardHeader title="Disclosure readiness" subtitle={s ? `${s.projects_tracked} public goods · ${s.repos_tracked} repos · coverage counts only checked repos` : undefined} icon={<Boxes className="size-4" />} />
+          <CardHeader title="Ecosystem readiness" subtitle={s ? `${s.projects_tracked} public goods · ${s.repos_tracked} repos · coverage counts only checked repos` : undefined} icon={<Boxes className="size-4" />} />
           <div className="grid gap-5 p-5">
             {s ? (
               <>
                 <CoverageRing value={s.policy_coverage} label="Publish a SECURITY.md" color="#818cf8" />
                 <CoverageRing value={s.pvr_coverage} label="GitHub private vulnerability reporting enabled" color="#22d3ee" />
                 <CoverageRing value={s.sbom_coverage} label="Submit verified SBOMs to PG Atlas" color="#34d399" />
+                <CoverageRing value={s.audit_coverage} label="of WG public goods have a Security Portal audit" color="#fbbf24" />
               </>
             ) : (
               <Skeleton className="h-56" />

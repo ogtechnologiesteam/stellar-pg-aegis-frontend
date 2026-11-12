@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "data:refresh": "node scripts/build-snapshot.ts",
     "data:reachability": "node scripts/annotate-reachability.ts",
-    "data:review": "node scripts/apply-review.ts"
+    "data:review": "node scripts/apply-review.ts",
+    "data:diff": "node scripts/diff-snapshot.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.0",

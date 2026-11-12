@@ -21,6 +21,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
   ActivityStatus,
+  AuditReport,
   Confidence,
   DisclosureChannel,
   EcosystemSummary,
@@ -45,6 +46,8 @@ import { CLONES_DIR, ghKey, ghRepoOf, govcBinary, govcRepo, GOVC_MAX, GOVC_REPOS
 
 const PG = (process.env.PG_ATLAS_API ?? 'https://api.pgatlas.xyz').replace(/\/$/, '')
 const WG_SITE = 'https://scf-public-goods-maintenance.github.io'
+const PORTAL = (process.env.SECURITY_PORTAL_API ?? 'https://stellarsecurityportal.com/api/v1').replace(/\/$/, '')
+const PORTAL_SITE = new URL(PORTAL).origin
 const GH_TOKEN = process.env.GITHUB_TOKEN ?? ''
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), '../public/data/snapshot.json')
 const NOW = new Date().toISOString()
@@ -391,6 +394,29 @@ const WG_MAP: Record<string, { id?: string; owner?: string; repo?: string }> = {
   'stellar-ios-mac-sdk': { id: 'daoip-5:scf:project:stellar_ios_mac_sdk' },
   'stellar-php-sdk': { id: 'daoip-5:scf:project:stellar_php_sdk' },
 }
+
+// Normalized Security Portal protocol name -> PG Atlas project. Curated like WG_MAP:
+// the portal's own naming is free-form, so name-only matching is unreliable. Protocols
+// not listed here still match when protocol.url points at a tracked repo or the
+// project's website/git_owner_url host.
+const PORTAL_MAP: Record<string, { id?: string; owner?: string; repo?: string }> = {
+  'stellar security portal': { id: 'daoip-5:scf:project:soroban_security_portal' },
+  'soroban security portal': { id: 'daoip-5:scf:project:soroban_security_portal' },
+  tansu: { id: 'daoip-5:scf:project:tansu_-_soroban_versioning' },
+  'stellar contracts library': { repo: 'openzeppelin/stellar-contracts' },
+  'scaffold registry': { repo: 'stellar-registry/cli' },
+  soroswap: { owner: 'soroswap' },
+  defindex: { repo: 'paltalabs/defindex' },
+  allbridge: { owner: 'allbridge-io' },
+  'dia oracles': { repo: 'diadata-org/spectra-interoperability' },
+  spectra: { repo: 'diadata-org/spectra-interoperability' },
+  'volta circuit': { id: 'daoip-5:scf:project:volta_circuit' },
+  'volta wallet': { id: 'daoip-5:scf:project:volta_circuit' },
+  stellarchain: { id: 'daoip-5:scf:project:stellarchain.io' },
+  alula: { id: 'daoip-5:scf:project:alula' },
+}
+
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 async function main() {
   await mkdir(CACHE_DIR, { recursive: true })
@@ -805,6 +831,100 @@ async function main() {
     }
   })
 
+  // ---- Stellar Security Portal audit reports
+  // Public unauthenticated API served from the site origin (the portal's deploy passes
+  // apiUrl=https://stellarsecurityportal.com to its UI). Only approved reports are
+  // surfaced — draft/rejected reports aren't publicly visible to guests.
+  interface PortalProtocol {
+    id: number
+    name: string
+    url?: string | null
+  }
+  interface PortalReport {
+    id: number
+    name: string
+    date: string
+    status?: string
+    protocolId: number
+    protocolName?: string
+    auditorName?: string | null
+  }
+  const auditsByProject = new Map<string, AuditReport[]>()
+  const portalFetch = async <T>(key: string, fetcher: () => Promise<T | null>): Promise<T | null> => {
+    const hit = await cacheGet<T | null>(`portal:${key}`, CACHE_TTL_MS)
+    if (hit !== undefined) return hit
+    const v = await fetcher().catch(() => null)
+    await cacheSet(`portal:${key}`, v)
+    return v
+  }
+  const portalProtocols = await portalFetch('protocols', () => http<PortalProtocol[]>(`${PORTAL}/protocols`, {}, { retries: 1 }))
+  const portalReports = portalProtocols
+    ? await portalFetch('reports', () => http<PortalReport[]>(`${PORTAL}/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }, { retries: 1 }))
+    : null
+  const portalOk = portalProtocols != null && portalReports != null
+  if (!portalOk) {
+    log('Security Portal: unreachable — audit fields will be "not collected"')
+  } else {
+    // Hostname matching must skip VCS hosts — github.com URLs are handled by repoKey
+    // below; treating the host itself as a signal would match every GitHub-hosted project.
+    const VCS_HOSTS = new Set(['github.com', 'gitlab.com', 'bitbucket.org', 'codeberg.org', 'sr.ht'])
+    const hostOf = (url: string | null | undefined) => {
+      if (!url) return null
+      try {
+        const h = new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+        return VCS_HOSTS.has(h) ? null : h
+      } catch {
+        return null
+      }
+    }
+    const projByRepo = new Map<string, string>()
+    reposByProject.forEach((rs, i) => rs.forEach((r) => {
+      const k = repoKey(r.repo_url)
+      if (k) projByRepo.set(k, pgProjects[i].canonical_id)
+    }))
+    const projHosts = pgProjects.map((p, i) => new Set([hostOf(details[i]?.metadata?.website), hostOf(p.git_owner_url), ...reposByProject[i].map((r) => hostOf(r.repo_url))].filter((h): h is string => !!h)))
+    const findProject = (proto: PortalProtocol): string | null => {
+      const m = PORTAL_MAP[normName(proto.name)]
+      if (m) {
+        const found = pgProjects.find((p, i) => {
+          if (m.id) return p.canonical_id === m.id
+          if (m.owner) return ownerOf(p.git_owner_url) === m.owner
+          if (m.repo) return reposByProject[i].some((r) => repoKey(r.repo_url) === m.repo)
+          return false
+        })
+        if (found) return found.canonical_id
+      }
+      const rk = repoKey(proto.url ?? null)
+      if (rk && projByRepo.has(rk)) return projByRepo.get(rk)!
+      const h = hostOf(proto.url)
+      if (h) {
+        const i = projHosts.findIndex((s) => s.has(h))
+        if (i >= 0) return pgProjects[i].canonical_id
+      }
+      return null
+    }
+    const reportsByProto = new Map<number, PortalReport[]>()
+    for (const r of portalReports.filter((r) => (r.status ?? 'approved').toLowerCase() === 'approved')) {
+      const list = reportsByProto.get(r.protocolId) ?? []
+      list.push(r)
+      reportsByProto.set(r.protocolId, list)
+    }
+    const unmatched: string[] = []
+    for (const proto of portalProtocols) {
+      const cid = findProject(proto)
+      if (!cid) {
+        if (reportsByProto.has(proto.id)) unmatched.push(proto.name)
+        continue
+      }
+      const list = auditsByProject.get(cid) ?? []
+      for (const r of reportsByProto.get(proto.id) ?? []) list.push({ id: r.id, name: r.name, auditor: r.auditorName ?? null, date: r.date, url: `${PORTAL_SITE}/report/${r.id}` })
+      if (list.length) auditsByProject.set(cid, list)
+    }
+    for (const list of auditsByProject.values()) list.sort((a, b) => b.date.localeCompare(a.date))
+    const matchedReports = [...auditsByProject.values()].reduce((a, l) => a + l.length, 0)
+    log(`Security Portal: ${portalProtocols.length} protocols, ${reportsByProto.size} with approved reports — matched ${matchedReports} reports onto ${auditsByProject.size} projects${unmatched.length ? ` · unmatched: ${unmatched.join(', ')}` : ''}`)
+  }
+
   // ---- assemble projects
   const emptyCounts = (): SeverityCounts => ({ critical: 0, high: 0, medium: 0, low: 0, unknown: 0 })
   const projects: ProjectDetail[] = pgProjects.map((p, i) => {
@@ -858,6 +978,8 @@ async function main() {
       published_advisories_count: GH_TOKEN ? pAdvisories.length : null,
       last_advisory_at: pAdvisories[0]?.published_at ?? null,
       scorecard_overall: scores.length ? Math.max(...scores) : null,
+      audit_reports_count: portalOk ? (auditsByProject.get(p.canonical_id)?.length ?? 0) : null,
+      last_audit_at: auditsByProject.get(p.canonical_id)?.[0]?.date ?? null,
     }
 
     // disclosure channels, ranked: PVR > SECURITY.md contacts > security.txt > policy link > fallback
@@ -906,6 +1028,7 @@ async function main() {
       findings: pFindings,
       disclosure: channels.map((c, k) => ({ ...c, rank: k + 1 })),
       published_advisories: pAdvisories,
+      audits: auditsByProject.get(p.canonical_id) ?? [],
     }
   })
 
@@ -970,12 +1093,18 @@ async function main() {
       ? findings.reduce((a, f) => (f.reachability ? { ...a, [f.reachability]: a[f.reachability] + 1 } : a), { called: 0, 'not-called': 0, unflagged: 0 } as Record<Reachability, number>)
       : null,
     median_fixable_advisory_age_days: median(fixableAges) !== null ? Math.round(median(fixableAges)!) : null,
+    audit_coverage: portalOk
+      ? (() => {
+          const wg = projects.filter((p) => p.wg_listed)
+          return wg.length ? wg.filter((p) => p.audits.length > 0).length / wg.length : null
+        })()
+      : null,
     dependencies_total: depsTotal,
     dependencies_resolved: depsResolved,
     by_ecosystem: [...ecoMap.entries()].map(([ecosystem, v]) => ({ ecosystem, findings: v.findings, repos: v.repos.size })).sort((a, b) => b.findings - a.findings),
     pg_atlas: metadata,
     generated_at: NOW,
-    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : []), ...(govcResults.size ? ['govulncheck'] : [])],
+    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : []), ...(govcResults.size ? ['govulncheck'] : []), ...(portalOk ? ['Stellar Security Portal'] : [])],
   }
 
   const snapshot: Snapshot = { summary, projects, vulns, exposures }

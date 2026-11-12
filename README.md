@@ -45,11 +45,12 @@ flowchart LR
         GH[GitHub<br/>SECURITY.md · PVR]
         OSSF[OpenSSF Scorecard]
         SCTXT[security.txt]
+        SSP[Stellar Security Portal<br/>audit reports]
         GOVC[govulncheck<br/>Go call analysis]
         LOCK[Lockfile probes<br/>manual review]
     end
 
-    PG & OSV & KEV & EPSS & GH & OSSF & SCTXT --> BS[build-snapshot.ts<br/>npm run data:refresh]
+    PG & OSV & KEV & EPSS & GH & OSSF & SCTXT & SSP --> BS[build-snapshot.ts<br/>npm run data:refresh]
     GOVC --> AR[annotate-reachability.ts<br/>npm run data:reachability]
     LOCK --> APR[apply-review.ts<br/>npm run data:review]
     BS & AR & APR --> SNAP[(public/data/<br/>snapshot.json)]
@@ -69,6 +70,7 @@ flowchart LR
 | GitHub API | SECURITY.md, PVR status, advisories, update tooling | `GITHUB_TOKEN` | 72h | live (capped by `GH_MAX_REPOS`) |
 | OpenSSF Scorecard | repo health scores | none | 72h | live |
 | security.txt | disclosure contacts on project domains | none | refresh-time | live |
+| Stellar Security Portal | approved audit reports per protocol (`SECURITY_PORTAL_API`) | none | 24h | live |
 | govulncheck | Go reachability (`called`/`not-called`/`unflagged`) | `go` toolchain | 30d per commit SHA | live (`GOVC=0` disables) |
 | Lockfile probes | findings missed by the edge graph | none | n/a — runs on demand | live |
 | Backend `/v1/*` | replaces the static snapshot | — | — | planned (spec §8) |
@@ -82,6 +84,44 @@ flowchart LR
 | `npm run data:refresh` | rebuild `public/data/snapshot.json` — needs `GITHUB_TOKEN`, `PG_ATLAS_API` |
 | `npm run data:reachability` | govulncheck pass over the existing snapshot (`GOVC_REPOS=owner/name,…` to target) |
 | `npm run data:review` | apply manual verdicts + lockfile probes to the snapshot |
+| `npm run data:diff` | `node scripts/diff-snapshot.ts <old.json> <new.json>` — markdown report of finding changes (used by the refresh workflow) |
+
+## Use in your repo
+
+Maintainers can drop Aegis's vulnerability scan into their own CI. It runs
+[osv-scanner](https://github.com/google/osv-scanner) over committed lockfiles (PRs flag only
+*newly introduced* vulnerabilities) plus `govulncheck` reachable-vulnerability analysis on
+Go modules, and uploads results to Security → Code scanning.
+
+```yaml
+# .github/workflows/aegis-scan.yml
+name: Vulnerability scan
+on:
+  pull_request:
+  schedule: [{ cron: '30 5 * * 1' }]
+
+permissions: {}
+
+jobs:
+  scan:
+    uses: ogtechnologiesteam/stellar-pg-aegis-frontend/.github/workflows/aegis-scan.yml@main
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+```
+
+Inputs: `fail-on-vuln` (default `true`), `govulncheck` (default `true`),
+`sarif-upload` (default `true`), `scan-args` (forwarded to osv-scanner).
+Ignore advisories with an `osv-scanner.toml` `[[IgnoredVulns]]` block at the repo root —
+see this repo's `osv-scanner.toml` for an example.
+
+## Workflows in this repo
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `vuln-scan.yml` | PRs + weekly | dogfoods `aegis-scan.yml` on this repo's own lockfiles |
+| `snapshot-refresh.yml` | nightly + dispatch | rebuilds `public/data/snapshot.json`, writes the finding diff to the job summary, commits the result. Set `AEGIS_GH_TOKEN` (PAT) if the built-in token rate-limits GitHub enrichment or if branch protection blocks the snapshot commit |
 
 ## Conventions
 

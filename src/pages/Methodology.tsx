@@ -19,6 +19,7 @@ const SOURCES = [
   ['OpenSSF Scorecard', 'Overall repo score where Scorecard has scanned the repository.'],
   ['CISA KEV · FIRST EPSS', 'Exploitation signals used for prioritization.'],
   ['govulncheck', 'Go call analysis — clones repos with Go findings at HEAD and checks whether their code calls the symbols each advisory names (reachability: called / not-called / unflagged). Also emits advisories it reports that edge matching missed.'],
+  ['Stellar Security Portal', 'Approved audit reports per protocol (stellarsecurityportal.com). Protocols are matched to projects by a curated map plus the protocol’s own URL; unapproved reports are never surfaced.'],
   ['Lockfile probes', 'Manual review reads a repo’s committed lockfile at HEAD (Cargo.lock, package-lock.json, pnpm-lock.yaml, bun.lock, uv.lock, composer.lock, requirements.txt) and matches it against OSV — recovering findings PG Atlas never ingested and clearing stale edges. Verdicts prefixed “manual:” carry a one-line justification.'],
 ]
 

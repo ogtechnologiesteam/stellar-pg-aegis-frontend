@@ -1,0 +1,137 @@
+name: Aegis vulnerability scan
+
+# Callable vulnerability scan for any repo. Wraps Google's maintained osv-scanner
+# reusable workflow (lockfile/manifest scanning + SARIF upload) and adds a
+# govulncheck pass for Go modules (reachable-vulnerability analysis).
+#
+# Callers need to grant the job:
+#   permissions:
+#     contents: read
+#     actions: read          # lets the SARIF upload read workflow status
+#     security-events: write # uploads results to Security > Code scanning
+#
+#   jobs:
+#     scan:
+#       uses: ogtechnologiesteam/stellar-pg-aegis-frontend/.github/workflows/aegis-scan.yml@<ref>
+#       permissions:
+#         contents: read
+#         actions: read
+#         security-events: write
+
+on:
+  workflow_call:
+    inputs:
+      scan-args:
+        description: 'Arguments forwarded to osv-scanner, one per line'
+        required: false
+        type: string
+        default: |
+          --recursive
+          ./
+      fail-on-vuln:
+        description: 'Fail the job when vulnerabilities are found'
+        required: false
+        type: boolean
+        default: true
+      govulncheck:
+        description: 'Run govulncheck on Go modules (reachable-vulnerability analysis)'
+        required: false
+        type: boolean
+        default: true
+      sarif-upload:
+        description: 'Upload results to GitHub code scanning'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  # PR-diff scan: only flags vulnerabilities the change introduces.
+  osv-scan-pr:
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.7.0
+    with:
+      scan-args: ${{ inputs.scan-args }}
+      upload-sarif: ${{ inputs.sarif-upload }}
+      fail-on-vuln: ${{ inputs.fail-on-vuln }}
+
+  # Full scan: schedules, dispatches, pushes — reports all known vulnerabilities.
+  osv-scan:
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+    with:
+      scan-args: ${{ inputs.scan-args }}
+      upload-sarif: ${{ inputs.sarif-upload }}
+      fail-on-vuln: ${{ inputs.fail-on-vuln }}
+
+  govulncheck:
+    if: inputs.govulncheck
+    permissions:
+      contents: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect Go modules
+        id: mods
+        run: |
+          if find . -name go.mod -not -path './vendor/*' -print -quit | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go
+        if: steps.mods.outputs.present == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: govulncheck
+        if: steps.mods.outputs.present == 'true'
+        env:
+          SARIF: ${{ inputs.sarif-upload }}
+          FAIL: ${{ inputs.fail-on-vuln }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          tmp=$(mktemp -d)
+          flagged=0
+          while IFS= read -r -d '' mod; do
+            dir=$(dirname "$mod")
+            echo "==> govulncheck $dir"
+            code=0
+            (cd "$dir" && govulncheck ./...) || code=$?
+            # exit 3 = vulnerabilities found; other non-zero = analysis error
+            if [ "$code" -eq 3 ]; then flagged=1
+            elif [ "$code" -ne 0 ]; then echo "::warning::govulncheck failed in $dir (exit $code)"; fi
+            if [ "$SARIF" = "true" ]; then
+              (cd "$dir" && govulncheck -format sarif ./...) > "$tmp/$(echo "$dir" | tr '/.' '__').sarif" || true
+            fi
+          done < <(find . -name go.mod -not -path './vendor/*' -print0)
+          if [ "$SARIF" = "true" ]; then
+            jq -s '{"$schema": "https://json.schemastore.org/sarif-2.1.0.json", version: "2.1.0", runs: [.[].runs[]]}' "$tmp"/*.sarif > "$GITHUB_WORKSPACE/govc-results.sarif"
+            echo "govc_sarif=true" >> "$GITHUB_ENV"
+          fi
+          if [ "$flagged" -eq 1 ]; then
+            echo "::warning title=govulncheck::Code paths into vulnerable symbols found — see job log and code scanning"
+          else
+            echo "No reachable vulnerabilities in Go modules" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$FAIL" = "true" ] && [ "$flagged" -eq 1 ]; then exit 1; fi
+
+      - name: Upload govulncheck SARIF
+        if: env.govc_sarif == 'true'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: govc-results.sarif
+          category: govulncheck
