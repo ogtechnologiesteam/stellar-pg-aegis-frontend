@@ -7,7 +7,7 @@
  * Also appends new_findings=N, resolved_findings=N, kev_new=N to $GITHUB_OUTPUT when set.
  */
 import { appendFile, readFile } from 'node:fs/promises'
-import type { Finding, Snapshot } from '../src/api/types.ts'
+import type { Finding, SastFinding, Snapshot } from '../src/api/types.ts'
 
 const [oldPath, newPath] = process.argv.slice(2)
 if (!oldPath || !newPath) {
@@ -26,6 +26,13 @@ const added = [...after.values()].filter((f) => !before.has(f.id)).sort((a, b) =
 const removed = [...before.values()].filter((f) => !after.has(f.id))
 const kevNew = added.filter((f) => f.kev).length + [...after.values()].filter((f) => f.kev && before.has(f.id) && !before.get(f.id)!.kev).length
 const reachFlips = [...after.values()].filter((f) => before.has(f.id) && before.get(f.id)!.reachability !== f.reachability)
+
+const sastOf = (s: Snapshot) => s.projects.flatMap((p) => p.sast_findings ?? [])
+const sastById = (fs: SastFinding[]) => new Map(fs.map((f) => [f.id, f]))
+const sastBefore = sastById(sastOf(prev))
+const sastAfter = sastById(sastOf(next))
+const sastAdded = [...sastAfter.values()].filter((f) => !sastBefore.has(f.id))
+const sastRemoved = [...sastBefore.values()].filter((f) => !sastAfter.has(f.id))
 const newVulnIds = new Set(next.vulns.map((v) => v.id))
 const addedAdvisories = prev.vulns.filter((v) => !newVulnIds.has(v.id)).length
 const newProjects = new Set(added.map((f) => f.project_id))
@@ -52,10 +59,20 @@ if (reachFlips.length) {
   out.push('')
 }
 if (addedAdvisories) out.push(`_${addedAdvisories} tracked advisories no longer affect any public good._`, '')
-if (!added.length && !removed.length && !reachFlips.length) out.push('_No finding changes since the last snapshot._')
+const sastNewErrors = sastAdded.filter((f) => f.severity === 'error')
+if (sastAdded.length || sastRemoved.length) {
+  out.push(`### SAST (Semgrep)`, '', `**${sastAdded.length} new** static-analysis findings · ${sastRemoved.length} resolved · ${sastNewErrors.length} error-severity`, '')
+  if (sastNewErrors.length) {
+    out.push('| Project | Rule | Location |', '| --- | --- | --- |')
+    for (const f of sastNewErrors.slice(0, 20)) out.push(`| ${esc(f.project_name)} | \`${esc(f.rule_id)}\` | \`${esc(f.path)}:${f.start_line}\` |`)
+    if (sastNewErrors.length > 20) out.push(`| … | | ${sastNewErrors.length - 20} more |`)
+    out.push('')
+  }
+}
+if (!added.length && !removed.length && !reachFlips.length && !sastAdded.length && !sastRemoved.length) out.push('_No finding changes since the last snapshot._')
 
 console.log(out.join('\n'))
 
 if (process.env.GITHUB_OUTPUT) {
-  await appendFile(process.env.GITHUB_OUTPUT, `new_findings=${added.length}\nresolved_findings=${removed.length}\nkev_new=${kevNew}\n`)
+  await appendFile(process.env.GITHUB_OUTPUT, `new_findings=${added.length}\nresolved_findings=${removed.length}\nkev_new=${kevNew}\nsast_new=${sastAdded.length}\nsast_resolved=${sastRemoved.length}\n`)
 }

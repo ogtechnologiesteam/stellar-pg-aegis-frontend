@@ -4,6 +4,7 @@ import { useProject } from '../api'
 import { ApiError } from '../api/client'
 import { DisclosureChannels } from '../components/DisclosureCard'
 import { FindingsTable } from '../components/FindingsTable'
+import { SastFindings } from '../components/SastFindings'
 import { Card, CardHeader, CheckItem, EmptyState, ErrorState, PageHeader, Pill, ScoreBar, SeverityBadge, SeverityStack, Skeleton, StatusPill } from '../components/ui'
 import { relativeTime, totalFindings } from '../lib/format'
 
@@ -111,6 +112,8 @@ export default function ProjectDetail() {
         )}
         <FindingsTable findings={visibleFindings} />
       </Card>
+
+      {(p.sast_findings?.length ?? 0) > 0 && <SastFindings findings={p.sast_findings!} repos={p.repos} />}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

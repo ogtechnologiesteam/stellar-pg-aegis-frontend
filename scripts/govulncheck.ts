@@ -100,9 +100,9 @@ function parseGovc(out: string): Map<string, { v: 'called' | 'not-called'; t: st
  * govulncheck resolved from the repo's go.mod (used to emit new findings). */
 export type ReachVerdicts = Map<string, { v: Reachability; t: string | null; m: string | null; v2: string | null }>
 
-// Shallow-clone (or refresh) the repo, run govulncheck per go.mod directory, return
-// per-OSV verdicts. null = could not analyze (clone or every module run failed).
-export async function govcRepo(bin: string, gh: { owner: string; name: string }, url: string): Promise<ReachVerdicts | null> {
+// Shallow-clone (or refresh) a GitHub repo into .cache/clones/<owner>__<name> and
+// return the checkout dir + HEAD sha. Shared by govulncheck and the Semgrep pass.
+export async function ensureClone(gh: { owner: string; name: string }, url: string): Promise<{ dir: string; sha: string } | null> {
   const key = `${gh.owner}/${gh.name}`.toLowerCase()
   const dir = resolve(CLONES_DIR, key.replace('/', '__'))
   await mkdir(CLONES_DIR, { recursive: true })
@@ -112,13 +112,22 @@ export async function govcRepo(bin: string, gh: { owner: string; name: string },
   } else {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
     if (!(await sh('git', ['clone', '--depth=1', url, dir], CLONES_DIR, 360_000)).ok) {
-      log(`govulncheck: clone failed for ${key}`)
+      log(`clone failed for ${key}`)
       return null
     }
   }
   const head = await sh('git', ['rev-parse', 'HEAD'], dir)
-  if (!head.ok) return null
-  const ck = `govc2:${key}@${head.out.trim()}`
+  return head.ok ? { dir, sha: head.out.trim() } : null
+}
+
+// Shallow-clone (or refresh) the repo, run govulncheck per go.mod directory, return
+// per-OSV verdicts. null = could not analyze (clone or every module run failed).
+export async function govcRepo(bin: string, gh: { owner: string; name: string }, url: string): Promise<ReachVerdicts | null> {
+  const key = `${gh.owner}/${gh.name}`.toLowerCase()
+  const clone = await ensureClone(gh, url)
+  if (!clone) return null
+  const { dir, sha } = clone
+  const ck = `govc2:${key}@${sha}`
   const hit = await cacheGet<{ v: Record<string, { c: boolean; t: string | null; m: string | null; v2: string | null }> }>(ck, GOVC_TTL_MS)
   if (hit !== undefined) return hit ? new Map(Object.entries(hit.v).map(([k, x]) => [k, { v: x.c ? 'called' : 'not-called', t: x.t, m: x.m, v2: x.v2 }])) : null
   const mods = await goModDirs(dir)

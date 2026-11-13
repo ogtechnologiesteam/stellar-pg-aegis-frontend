@@ -35,6 +35,7 @@ import type {
   Reachability,
   Repo,
   Resolution,
+  SastFinding,
   SeverityCounts,
   Snapshot,
   Vuln,
@@ -43,6 +44,7 @@ import { computePriority, logNorm } from '../src/lib/priority.ts'
 import { affectedFor, fetchOsv, kindOf, LABEL, severityOf, UPGRADE_HINT, type OsvVuln } from './osv.ts'
 import { CACHE_DIR, cacheGet, cachePath, cacheSet, log } from './cache.ts'
 import { CLONES_DIR, ghKey, ghRepoOf, govcBinary, govcRepo, GOVC_MAX, GOVC_REPOS, type ReachVerdicts } from './govulncheck.ts'
+import { sastRepo, semgrepBinary, semgrepVersion, SEMGREP_CONFIG, SEMGREP_MAX, SEMGREP_REPOS } from './semgrep.ts'
 
 const PG = (process.env.PG_ATLAS_API ?? 'https://api.pgatlas.xyz').replace(/\/$/, '')
 const WG_SITE = 'https://scf-public-goods-maintenance.github.io'
@@ -752,6 +754,60 @@ async function main() {
     }
   }
 
+  // ---- Semgrep SAST for WG-listed repos
+  // Shallow-clone public-good repos (highest criticality first, SEMGREP_MAX_REPOS caps),
+  // run `semgrep scan --config <ruleset> --json`, cache results per commit SHA. SAST
+  // findings are a separate type — no CVE/priority semantics.
+  const sastByProject = new Map<string, SastFinding[]>()
+  const sastSev = { error: 0, warning: 0, info: 0 }
+  let sastToolVersion: string | null = null
+  let sastTargeted = 0
+  let sastScanned = 0
+  if (process.env.SEMGREP === '0') {
+    log('semgrep: disabled via SEMGREP=0')
+  } else {
+    const seenGh = new Set<string>()
+    const sastTargets = allRepos
+      .filter((r) => wgSet.has(pgProjects[repoOwner.get(r.canonical_id)!].canonical_id))
+      .map((r) => ({ r, gh: ghRepoOf(r.repo_url) }))
+      .filter((x): x is { r: PgRepo; gh: { owner: string; name: string } } => !!x.gh && (!SEMGREP_REPOS || SEMGREP_REPOS.includes(ghKey(x.gh))))
+      .filter((x) => {
+        const k = ghKey(x.gh)
+        if (seenGh.has(k)) return false
+        seenGh.add(k)
+        return true
+      })
+      .sort((a, b) => (b.r.criticality_score ?? 0) - (a.r.criticality_score ?? 0))
+      .slice(0, SEMGREP_MAX)
+    sastTargeted = sastTargets.length
+    const bin = sastTargets.length ? await semgrepBinary() : null
+    if (sastTargets.length && !bin) {
+      log('semgrep: neither semgrep nor python3 found — SAST fields will be "not collected"')
+    } else if (bin) {
+      sastToolVersion = await semgrepVersion(bin)
+      log(`semgrep ${sastToolVersion ?? ''}: scanning ${sastTargets.length} WG-listed repos (${SEMGREP_CONFIG})${Number.isFinite(SEMGREP_MAX) ? ' (capped)' : ''} — cached per commit`)
+      await mkdir(CLONES_DIR, { recursive: true })
+      await pool(sastTargets, 2, async ({ r, gh }) => {
+        const proj = pgProjects[repoOwner.get(r.canonical_id)!]
+        const res = await sastRepo(bin, gh, r.repo_url!, {
+          repo_id: r.canonical_id,
+          repo_name: r.display_name,
+          project_id: proj.canonical_id,
+          project_name: proj.display_name,
+        })
+        if (!res) return
+        sastScanned++
+        for (const f of res.findings) {
+          sastSev[f.severity]++
+          const list = sastByProject.get(proj.canonical_id) ?? []
+          list.push(f)
+          sastByProject.set(proj.canonical_id, list)
+        }
+      })
+      log(`semgrep: ${sastScanned}/${sastTargets.length} repos scanned · ${sastSev.error} errors / ${sastSev.warning} warnings / ${sastSev.info} info`)
+    }
+  }
+
   // ---- GitHub enrichment
   // Coverage is incremental: repos with findings first, then by stars. Results are cached
   // per repo, so a capped or interrupted run still keeps its progress and the next
@@ -1031,6 +1087,7 @@ async function main() {
       disclosure: channels.map((c, k) => ({ ...c, rank: k + 1 })),
       published_advisories: pAdvisories,
       audits: auditsByProject.get(p.canonical_id) ?? [],
+      sast_findings: sastByProject.get(p.canonical_id) ?? [],
     }
   })
 
@@ -1094,6 +1151,9 @@ async function main() {
     reachability: govcResults.size
       ? findings.reduce((a, f) => (f.reachability ? { ...a, [f.reachability]: a[f.reachability] + 1 } : a), { called: 0, 'not-called': 0, unflagged: 0 } as Record<Reachability, number>)
       : null,
+    sast: sastTargeted
+      ? { ruleset: SEMGREP_CONFIG, tool_version: sastToolVersion, repos_targeted: sastTargeted, repos_scanned: sastScanned, findings: { ...sastSev } }
+      : null,
     median_fixable_advisory_age_days: median(fixableAges) !== null ? Math.round(median(fixableAges)!) : null,
     audit_coverage: portalOk
       ? (() => {
@@ -1106,7 +1166,7 @@ async function main() {
     by_ecosystem: [...ecoMap.entries()].map(([ecosystem, v]) => ({ ecosystem, findings: v.findings, repos: v.repos.size })).sort((a, b) => b.findings - a.findings),
     pg_atlas: metadata,
     generated_at: NOW,
-    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : []), ...(govcResults.size ? ['govulncheck'] : []), ...(portalOk ? ['Stellar Security Portal'] : [])],
+    sources: ['PG Atlas', 'OSV.dev', 'CISA KEV', 'FIRST EPSS', 'OpenSSF Scorecard', ...(GH_TOKEN ? ['GitHub'] : []), ...(govcResults.size ? ['govulncheck'] : []), ...(sastScanned ? ['Semgrep'] : []), ...(portalOk ? ['Stellar Security Portal'] : [])],
   }
 
   const snapshot: Snapshot = { summary, projects, vulns, exposures }

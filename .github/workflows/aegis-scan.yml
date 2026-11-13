@@ -38,6 +38,16 @@ on:
         required: false
         type: boolean
         default: true
+      semgrep:
+        description: 'Run Semgrep SAST scan'
+        required: false
+        type: boolean
+        default: true
+      semgrep-config:
+        description: 'Semgrep config — registry ruleset name or local rules path'
+        required: false
+        type: string
+        default: 'p/security-audit'
       sarif-upload:
         description: 'Upload results to GitHub code scanning'
         required: false
@@ -97,6 +107,7 @@ jobs:
           go-version: stable
 
       - name: govulncheck
+        id: govc
         if: steps.mods.outputs.present == 'true'
         env:
           SARIF: ${{ inputs.sarif-upload }}
@@ -119,7 +130,7 @@ jobs:
           done < <(find . -name go.mod -not -path './vendor/*' -print0)
           if [ "$SARIF" = "true" ]; then
             jq -s '{"$schema": "https://json.schemastore.org/sarif-2.1.0.json", version: "2.1.0", runs: [.[].runs[]]}' "$tmp"/*.sarif > "$GITHUB_WORKSPACE/govc-results.sarif"
-            echo "govc_sarif=true" >> "$GITHUB_ENV"
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
           fi
           if [ "$flagged" -eq 1 ]; then
             echo "::warning title=govulncheck::Code paths into vulnerable symbols found — see job log and code scanning"
@@ -129,9 +140,62 @@ jobs:
           if [ "$FAIL" = "true" ] && [ "$flagged" -eq 1 ]; then exit 1; fi
 
       - name: Upload govulncheck SARIF
-        if: env.govc_sarif == 'true'
+        if: steps.govc.outputs.sarif == 'true'
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: govc-results.sarif
           category: govulncheck
+
+  # SAST: Semgrep scan with a pinned ruleset, SARIF to code scanning.
+  semgrep:
+    if: inputs.semgrep
+    permissions:
+      contents: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Semgrep
+        run: pip install semgrep==1.184.0
+
+      - name: Semgrep scan
+        id: scan
+        env:
+          CFG: ${{ inputs.semgrep-config }}
+          SARIF: ${{ inputs.sarif-upload }}
+          FAIL: ${{ inputs.fail-on-vuln }}
+        run: |
+          code=0
+          semgrep scan --config "$CFG" --jobs 2 --max-memory 5000 --timeout 60 \
+            --metrics=off --disable-version-check --exclude '*.min.js' \
+            --json-output semgrep.json --sarif-output semgrep.sarif ./ || code=$?
+          # semgrep exits 1 when findings exist; >1 = scan/config error
+          if [ "$code" -gt 1 ]; then
+            echo "::warning::semgrep exited with code $code"
+            exit "$code"
+          fi
+          count=$(jq '.results | length' semgrep.json)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "::warning title=Semgrep::$count static-analysis findings — see code scanning"
+          else
+            echo "No Semgrep findings" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$FAIL" = "true" ] && [ "$count" -gt 0 ]; then exit 1; fi
+
+      - name: Upload Semgrep SARIF
+        if: inputs.sarif-upload && hashFiles('semgrep.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

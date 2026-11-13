@@ -35,6 +35,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false # no root go.sum — govulncheck runs against cloned repos
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
 
       - name: Install dependencies
         run: npm ci
@@ -64,6 +71,9 @@ jobs:
           # Caps GitHub enrichment per run to stay under the token's hourly limit;
           # cached results resume on the next run.
           GH_MAX_REPOS: '800'
+          # Caps Semgrep SAST scans per run (WG-listed repos, highest criticality
+          # first); per-commit-SHA cache grows coverage incrementally.
+          SEMGREP_MAX_REPOS: '40'
         run: npm run data:refresh && npm run data:review
 
       - name: Diff findings

@@ -44,11 +44,23 @@ Verification before finishing a change: `npm run lint && npm run build`.
   restricts to specific repos. Shared helpers live in `scripts/cache.ts` and
   `scripts/govulncheck.ts`; PG Atlas cache keys normalize to the canonical host so
   `PG_ATLAS_API` mirrors reuse them.
+  Semgrep SAST (WG-listed repos, highest criticality first): reuses the same clone pool,
+  runs `semgrep scan --config p/security-audit --json` per repo, and writes a separate
+  `sast_findings` array on each project — no priority score; severity is Semgrep's own
+  `error`/`warning`/`info`, not CVSS. Results are cached per commit SHA + semgrep
+  version + ruleset name for 30d (`null` = could not scan); `summary.sast` records
+  ruleset/tool_version/coverage (`null` = never ran). Needs `python3` + `pip`
+  (auto-`pip install --user`s when absent; pin via `SEMGREP_VERSION`, default 1.184.0).
+  `SEMGREP=0` disables; `SEMGREP_MAX_REPOS=<n>` caps cloned repos;
+  `SEMGREP_REPOS=owner/name,...` restricts; `SEMGREP_CONFIG` overrides the ruleset.
+  `p/*` registry rules drift upstream — expect occasional diffs that aren't code changes.
 - `scripts/annotate-reachability.ts` — `npm run data:reachability`: runs the same govulncheck
   pass against the existing `public/data/snapshot.json` without a full refresh.
+- `scripts/annotate-sast.ts` — `npm run data:sast`: runs the same Semgrep pass against
+  the existing `public/data/snapshot.json` without a full refresh.
 - `scripts/diff-snapshot.ts` — `npm run data:diff <old.json> <new.json>`: markdown report of
-  new/resolved findings, KEV adds and reachability flips; appends `new_findings=` etc. to
-  `$GITHUB_OUTPUT`. Used by the snapshot-refresh workflow.
+  new/resolved findings, KEV adds, reachability flips and SAST deltas; appends `new_findings=`,
+  `sast_new=` etc. to `$GITHUB_OUTPUT`. Used by the snapshot-refresh workflow.
 - Stellar Security Portal (`SECURITY_PORTAL_API`, default `https://stellarsecurityportal.com/api/v1`):
   `GET /protocols` + `POST /reports {}`; only `approved` reports are used. Protocol→project
   mapping is curated (`PORTAL_MAP` in `build-snapshot.ts`, same shape as `WG_MAP`) plus a
@@ -60,11 +72,13 @@ Verification before finishing a change: `npm run lint && npm run build`.
 
 - `.github/workflows/snapshot-refresh.yml` — nightly + dispatch: `data:refresh` + `data:review`,
   diffs against the previous snapshot into the job summary, commits `snapshot.json` back.
-  `GH_MAX_REPOS=800` bounds GitHub enrichment; set `AEGIS_GH_TOKEN` (PAT) if the default
-  `GITHUB_TOKEN` rate-limits or branch protection blocks the push (falls back to an artifact).
+  `GH_MAX_REPOS=800` bounds GitHub enrichment and `SEMGREP_MAX_REPOS=40` bounds Semgrep
+  SAST scans; set `AEGIS_GH_TOKEN` (PAT) if the default `GITHUB_TOKEN` rate-limits or
+  branch protection blocks the push (falls back to an artifact).
 - `.github/workflows/aegis-scan.yml` — `workflow_call` reusable scan for any repo: wraps
   `google/osv-scanner-action` (PR-diff variant on PRs, full scan otherwise) + govulncheck per
-  `go.mod`, merged SARIF upload to code scanning.
+  `go.mod` + Semgrep SAST (`semgrep-config` input, default `p/security-audit`), merged SARIF
+  uploads to code scanning.
 - `.github/workflows/vuln-scan.yml` — dogfoods `aegis-scan.yml` on this repo (PRs + weekly).
   Advisory ignores live in `osv-scanner.toml` at repo root.
 - React Query hooks (`useProjects`, `useVulnExposure`, ...) live in `src/api/index.ts`.

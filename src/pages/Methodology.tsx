@@ -19,6 +19,7 @@ const SOURCES = [
   ['OpenSSF Scorecard', 'Overall repo score where Scorecard has scanned the repository.'],
   ['CISA KEV · FIRST EPSS', 'Exploitation signals used for prioritization.'],
   ['govulncheck', 'Go call analysis — clones repos with Go findings at HEAD and checks whether their code calls the symbols each advisory names (reachability: called / not-called / unflagged). Also emits advisories it reports that edge matching missed.'],
+  ['Semgrep', 'SAST on WG-listed public-good repos — clones each repo at HEAD and runs the p/security-audit ruleset. Rule matches land in a separate sast_findings list per project with file:line and the scanned commit — never merged into CVE findings or the priority score. Results are cached per commit SHA for 30 days.'],
   ['Stellar Security Portal', 'Approved audit reports per protocol (stellarsecurityportal.com). Protocols are matched to projects by a curated map plus the protocol’s own URL; unapproved reports are never surfaced.'],
   ['Lockfile probes', 'Manual review reads a repo’s committed lockfile at HEAD (Cargo.lock, package-lock.json, pnpm-lock.yaml, bun.lock, uv.lock, composer.lock, requirements.txt) and matches it against OSV — recovering findings PG Atlas never ingested and clearing stale edges. Verdicts prefixed “manual:” carry a one-line justification.'],
 ]
@@ -95,6 +96,16 @@ export default function Methodology() {
                   <span className="text-xs text-slate-400">{d}</span>
                 </li>
               ))}
+            </ul>
+          </Card>
+
+          <Card>
+            <CardHeader title="Security Portal audits" subtitle="approved reports only — stellarsecurityportal.com" />
+            <ul className="list-disc space-y-2 p-5 pl-9 text-xs text-slate-400">
+              <li>Each report links to its portal page; title, auditor and date come from the portal record.</li>
+              <li>Protocols are matched to projects by a curated map plus the protocol’s own repo/website URL — never free-text name matching — so audits are not attributed to the wrong project.</li>
+              <li>An audit is evidence a review happened on a date, not a safety score — it does not change finding priority.</li>
+              <li>The Projects page filters to audited projects with <code>?audited=1</code>; the overview reports the share of WG-listed public goods with ≥1 approved report.</li>
             </ul>
           </Card>
 

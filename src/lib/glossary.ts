@@ -28,6 +28,17 @@ export const GLOSSARY: GlossaryTerm[] = [
     related: ['pony-factor', 'hygiene-profile'],
   },
   {
+    slug: 'audit-report',
+    term: 'Audit report',
+    short: 'A third-party security audit indexed by the Stellar Security Portal, matched to a tracked project.',
+    details: [
+      'The Stellar Security Portal (stellarsecurityportal.com) collects published audit reports for Soroban protocols — Zellic, OtterSec, Veridise, Quarkslab and others. Aegis fetches its approved reports and attaches them to the projects they cover: title, auditing firm, date and a link back to the portal page.',
+      'Matching is deliberately conservative: a curated protocol→project map plus the protocol’s own repo or website URL — never free-text name matching — so an audit is never attributed to the wrong project. Only approved reports are surfaced; draft and rejected reviews are not public data.',
+      'Audit presence is a hygiene signal, not a score: a report says code was reviewed on a date, not that it is safe. Projects can be filtered to audited ones (?audited=1) and the overview shows the share of WG-listed public goods with at least one report.',
+    ],
+    related: ['hygiene-profile', 'responsible-disclosure'],
+  },
+  {
     slug: 'blast-radius',
     term: 'Blast radius',
     short: 'The set of downstream repos exposed to a vulnerable package — direct plus transitive dependents.',
@@ -92,7 +103,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     short: 'The set of per-project security-practice signals — policy present, PVR enabled, advisories published, Scorecard checks.',
     details: [
       'Rather than collapsing security posture into one number, Aegis reports each practice separately — “profiles, not a score” — so maintainers and the working group can see exactly which practice is missing.',
-      'Signals include: has a SECURITY.md, PVR enabled, security.txt on the website, a dependency update tool configured, published advisories, and the oldest unpatched-but-fixable finding.',
+      'Signals include: has a SECURITY.md, PVR enabled, security.txt on the website, a dependency update tool configured, published advisories, audit reports on the Security Portal, and the oldest unpatched-but-fixable finding.',
     ],
     related: ['openssf-scorecard', 'disclosure-channel', 'priority-score'],
   },
@@ -195,6 +206,17 @@ export const GLOSSARY: GlossaryTerm[] = [
       'Aegis is built around this posture: it routes reporters to private channels, shows only already-public vulnerability data (OSV/GHSA/NVD), never stores embargoed reports or draft advisories, and only notifies maintainers who opt in. For critical findings on high-criticality projects, the spec allows an optional maintainer-first delay before prominent placement.',
     ],
     related: ['disclosure-channel', 'pvr'],
+  },
+  {
+    slug: 'sast',
+    term: 'SAST (Semgrep)',
+    short: 'Static analysis — Semgrep security rules matched against a repo’s source at HEAD, reported separately from CVE findings.',
+    details: [
+      'Static Application Security Testing finds risky code patterns — weak crypto, disabled TLS verification, injection sinks — by matching rules against source rather than against a dependency list. Aegis runs Semgrep’s p/security-audit ruleset on WG-listed repos: each repo is shallow-cloned at HEAD and results are cached per commit SHA for 30 days.',
+      'SAST findings are deliberately kept apart from vulnerability findings: they have no CVE, no fix version and no priority score. Their severity is Semgrep’s own error / warning / info, shown as-is. Each finding links into the repo at the exact scanned commit, so file:line deep-links never drift.',
+      'Rule matches are evidence, not proof — a flagged pattern says a human should look, not that an exploit exists. That is why they live in a separate list and never inflate a project’s open-finding counts.',
+    ],
+    related: ['reachability', 'hygiene-profile'],
   },
   {
     slug: 'sbom',

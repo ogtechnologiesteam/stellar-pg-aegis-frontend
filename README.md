@@ -16,11 +16,17 @@ dev notes: [`AGENTS.md`](AGENTS.md)
   fix availability − confidence penalty).
 - **Verification layers** on top of raw edges:
   - `govulncheck` call analysis for Go repos — `reachability: called / not-called / unflagged`
+  - Semgrep SAST on WG-listed repos — `p/security-audit` rules matched at HEAD, kept in a
+    separate `sast_findings` list (never priority-scored; severities are Semgrep's own)
   - lockfile probes — committed `Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
     `uv.lock`, `composer.lock`, `requirements.txt` matched directly against OSV, recovering
     findings the edge graph never saw
   - advisory **kinds** — RustSec `unmaintained`/`unsound`/`notice`/`yanked` and MAL-\* malware
     are badged separately from real vulnerabilities
+- **Audit reports** — approved audits from the
+  [Stellar Security Portal](https://stellarsecurityportal.com) matched to tracked projects via a
+  curated map plus each protocol's own URL (never name matching). Shown per project, filterable
+  with `?audited=1`, with WG-wide coverage on the overview.
 - **Disclosure routing** — ranked private channels per project: GitHub PVR, SECURITY.md
   contacts, security.txt, policy fallback.
 
@@ -47,13 +53,15 @@ flowchart LR
         SCTXT[security.txt]
         SSP[Stellar Security Portal<br/>audit reports]
         GOVC[govulncheck<br/>Go call analysis]
+        SG[Semgrep<br/>SAST · p/security-audit]
         LOCK[Lockfile probes<br/>manual review]
     end
 
     PG & OSV & KEV & EPSS & GH & OSSF & SCTXT & SSP --> BS[build-snapshot.ts<br/>npm run data:refresh]
     GOVC --> AR[annotate-reachability.ts<br/>npm run data:reachability]
+    SG --> AS[annotate-sast.ts<br/>npm run data:sast]
     LOCK --> APR[apply-review.ts<br/>npm run data:review]
-    BS & AR & APR --> SNAP[(public/data/<br/>snapshot.json)]
+    BS & AR & AS & APR --> SNAP[(public/data/<br/>snapshot.json)]
     SNAP --> SC[snapshotClient.ts]
     API[/v1 backend<br/>planned/] -.-> AC[client.ts]
     SC & AC --> IDX[src/api/index.ts<br/>VITE_API_BASE_URL switch] --> RQ[React Query] --> UI[Dashboard]
@@ -72,6 +80,7 @@ flowchart LR
 | security.txt | disclosure contacts on project domains | none | refresh-time | live |
 | Stellar Security Portal | approved audit reports per protocol (`SECURITY_PORTAL_API`) | none | 24h | live |
 | govulncheck | Go reachability (`called`/`not-called`/`unflagged`) | `go` toolchain | 30d per commit SHA | live (`GOVC=0` disables) |
+| Semgrep | SAST findings on WG-listed repos (`p/security-audit`) | `python3` + `pip` | 30d per commit SHA + version + ruleset | live (`SEMGREP=0` disables, `SEMGREP_MAX_REPOS` caps) |
 | Lockfile probes | findings missed by the edge graph | none | n/a — runs on demand | live |
 | Backend `/v1/*` | replaces the static snapshot | — | — | planned (spec §8) |
 
@@ -83,6 +92,7 @@ flowchart LR
 | `npm run lint` / `npm run build` | eslint / typecheck + production build (run both before finishing a change) |
 | `npm run data:refresh` | rebuild `public/data/snapshot.json` — needs `GITHUB_TOKEN`, `PG_ATLAS_API` |
 | `npm run data:reachability` | govulncheck pass over the existing snapshot (`GOVC_REPOS=owner/name,…` to target) |
+| `npm run data:sast` | Semgrep pass over the existing snapshot (`SEMGREP_REPOS=owner/name,…` to target) |
 | `npm run data:review` | apply manual verdicts + lockfile probes to the snapshot |
 | `npm run data:diff` | `node scripts/diff-snapshot.ts <old.json> <new.json>` — markdown report of finding changes (used by the refresh workflow) |
 
@@ -91,7 +101,8 @@ flowchart LR
 Maintainers can drop Aegis's vulnerability scan into their own CI. It runs
 [osv-scanner](https://github.com/google/osv-scanner) over committed lockfiles (PRs flag only
 *newly introduced* vulnerabilities) plus `govulncheck` reachable-vulnerability analysis on
-Go modules, and uploads results to Security → Code scanning.
+Go modules plus Semgrep SAST (`p/security-audit` by default), and uploads results to
+Security → Code scanning.
 
 ```yaml
 # .github/workflows/aegis-scan.yml
@@ -112,6 +123,7 @@ jobs:
 ```
 
 Inputs: `fail-on-vuln` (default `true`), `govulncheck` (default `true`),
+`semgrep` (default `true`), `semgrep-config` (default `p/security-audit`),
 `sarif-upload` (default `true`), `scan-args` (forwarded to osv-scanner).
 Ignore advisories with an `osv-scanner.toml` `[[IgnoredVulns]]` block at the repo root —
 see this repo's `osv-scanner.toml` for an example.

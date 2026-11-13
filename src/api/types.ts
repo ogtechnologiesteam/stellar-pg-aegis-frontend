@@ -4,6 +4,8 @@
 // "not collected / unknown" — never a guessed value.
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+/** Semgrep severity levels, passed through unchanged (not mapped onto CVSS severities). */
+export type SastSeverity = 'error' | 'warning' | 'info'
 export type ActivityStatus = 'live' | 'in-dev' | 'discontinued' | 'non-responsive'
 export type Confidence = 'confirmed' | 'possible' | 'inferred'
 /** govulncheck call-analysis verdict (Go repos only). Orthogonal to confidence:
@@ -152,6 +154,31 @@ export interface AuditReport {
   url: string
 }
 
+/** A Semgrep SAST finding (rule match in repo source). Separate from Finding — no
+ * priority score, no CVE semantics; severity is Semgrep's own error/warning/info. */
+export interface SastFinding {
+  /** repo_id|check_id|path:line:col — location-anchored, stable across commits while the matched code is unchanged. */
+  id: string
+  repo_id: string
+  repo_name: string
+  project_id: string
+  project_name: string
+  /** Semgrep check_id, e.g. go.lang.security.audit.crypto.use_of_weak_crypto */
+  rule_id: string
+  message: string
+  severity: SastSeverity
+  /** Repo-relative file path. */
+  path: string
+  start_line: number
+  end_line: number
+  /** Source lines Semgrep matched (trimmed). */
+  snippet: string | null
+  /** HEAD commit that was scanned — enables GitHub blob deep-links. */
+  commit_sha: string
+  cwe: string[]
+  owasp: string[]
+}
+
 export interface ProjectDetail extends ProjectSummary {
   description: string | null
   website: string | null
@@ -161,6 +188,8 @@ export interface ProjectDetail extends ProjectSummary {
   published_advisories: PublishedAdvisory[]
   /** Approved audit reports, newest first. Empty when the portal lists none or was not checked. */
   audits: AuditReport[]
+  /** Semgrep SAST findings across this project's scanned repos. Absent/empty when not scanned. */
+  sast_findings?: SastFinding[]
 }
 
 export interface Reference {
@@ -233,6 +262,14 @@ export interface EcosystemSummary {
   fixable_findings: number
   /** govulncheck verdict counts across Go findings. null = call analysis never ran. */
   reachability: Record<Reachability, number> | null
+  /** Semgrep SAST pass stats. null = SAST never ran. */
+  sast?: {
+    ruleset: string
+    tool_version: string | null
+    repos_targeted: number
+    repos_scanned: number
+    findings: Record<SastSeverity, number>
+  } | null
   median_fixable_advisory_age_days: number | null
   /** Share of WG-listed public goods with ≥1 approved Security Portal audit report. null = portal not checked. */
   audit_coverage: number | null
